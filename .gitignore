@@ -7,6 +7,12 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+bin/
+lib
+lib64
+pyvenv.cfg
+include
+share
 .Python
 build/
 develop-eggs/
