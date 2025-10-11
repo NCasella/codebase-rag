@@ -5,3 +5,6 @@ langchain-community
 langchain_chroma
 sentence_transformers
 langchain-text-splitters
+esprima
+tree-sitter==0.21.3
+tree-sitter-languages==1.10.2
