@@ -214,3 +214,8 @@ __marimo__/
 
 # Context
 context
+.claude
+roadmaps
+
+Pipfile
+Pipfile.lock
