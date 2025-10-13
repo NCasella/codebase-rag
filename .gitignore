@@ -219,3 +219,18 @@ roadmaps
 
 Pipfile
 Pipfile.lock
+
+# ChromaDB
+chroma_data/
+*.db
+*.sqlite
+
+# RAG Project Specific
+test_data/
+test_codebase.zip
+*.zip
+test_rag.py
+
+# Temporary files
+temp/
+tmp/
