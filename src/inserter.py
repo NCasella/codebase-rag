@@ -31,7 +31,7 @@ class ChromaCollection():
                                     documents=[doc.page_content for doc in docs],metadatas=[doc.metadata for doc in docs])
     
     def rag(self, query, model="gpt-4.1-nano"):
-        documents,_=self.retrieve_k_similar_docs(query)
+        documents,_=self.retrieve_k_similar_docs(query,k=10)
         information="\n".join(documents)
         messages=[
             {"role":"system",
