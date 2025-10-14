@@ -77,27 +77,68 @@ OPENAI_API_KEY=tu_api_key_aqui
 
 ### Uso Básico
 
-El script principal permite indexar una codebase desde un archivo zip y consultarla:
+El script principal permite indexar una codebase desde un archivo ZIP o GitHub y consultarla:
 
+#### Desde archivo ZIP:
 ```bash
-python main.py -c <nombre_coleccion> --zip <ruta_al_archivo_zip> --promt <consulta>
+python main.py -z <ruta_al_zip> -p "pregunta sobre el código"
 ```
 
 **Ejemplo:**
 ```bash
-python main.py -c mi_proyecto --zip ./mi_codebase.zip --prompt "Como funciona la autenticacion del proyecto?"
+python main.py -z test_codebase.zip -p "¿Cómo funciona la autenticación?"
 ```
 
-El script tambien puede indexear una codebase dado un link de un repositorio Github:
+#### Desde repositorio de GitHub:
 ```bash
-python main.py -c <nombre_coleccion> --github_link <github_repo_url> --promt <consulta>
+python main.py -g <url_github> -p "pregunta sobre el código"
 ```
+
 **Ejemplo:**
 ```bash
-python main.py -c mi_proyecto --github_link https://github.com/miuser/micodigo --prompt "Como funciona la autenticacion del proyecto?"
+python main.py -g https://github.com/usuario/repo -p "¿Qué hace este código?"
 ```
-Esto realizará:
-1. Crear una colección de ChromaDB llamada "mi_proyecto"
+
+#### Opciones adicionales:
+
+- `-c, --collection-name`: Nombre de la colección (default: "codeRAG")
+- `-v, --verbose`: Muestra logs detallados del proceso RAG
+
+**Ejemplo con todas las opciones:**
+```bash
+python main.py -z mi_proyecto.zip -p "¿Cómo se crea un usuario?" -c mi_coleccion -v
+```
+
+### Modo Verbose
+
+El flag `-v` o `--verbose` activa logs detallados que muestran:
+
+1. **Fragmentos recuperados**: Preview de los 5 fragmentos más relevantes encontrados
+2. **Información del contexto**: Longitud total y número de fragmentos usados
+3. **Detalles de generación**: Modelo usado, tokens aproximados y tokens totales consumidos
+
+**Sin verbose:**
+```bash
+python main.py -z test_codebase.zip -p "¿Qué hace este código?"
+# Solo muestra: Fases principales → Respuesta final
+```
+
+**Con verbose:**
+```bash
+python main.py -z test_codebase.zip -p "¿Qué hace este código?" -v
+# Muestra: Fases + Fragmentos recuperados + Métricas + Respuesta
+```
+
+El modo verbose es útil para:
+- Entender qué fragmentos de código está usando el RAG
+- Debuggear respuestas inesperadas
+- Evaluar la calidad de la recuperación
+- Ver el consumo de tokens de la API
+
+### Proceso completo
+
+Cuando ejecutas el comando, el sistema:
+1. Crea una colección de ChromaDB llamada según `-c` (default: "codeRAG")
 2. Extraer y parsear todos los archivos soportados del zip
 3. Insertar fragmentos de código en la base de datos vectorial
 4. Ejecutar una consulta de ejemplo (puede ser modificada en el script)

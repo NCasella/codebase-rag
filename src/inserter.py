@@ -95,7 +95,7 @@ class ChromaCollection():
             metadatas=[doc.metadata for doc in docs]
         )
     
-    def rag(self, query: str, model: str = "gpt-4.1-nano") -> str:
+    def rag(self, query: str, model: str = "gpt-4.1-nano", verbose: bool = False) -> str:
         """
         Responde preguntas sobre el código usando RAG (Retrieval-Augmented Generation).
 
@@ -104,6 +104,7 @@ class ChromaCollection():
         Args:
             query: Pregunta sobre el código (ej: "¿Cómo funciona la autenticación?")
             model: Modelo de OpenAI (default: gpt-4.1-nano)
+            verbose: Si es True, muestra logs detallados del proceso
 
         Returns:
             Respuesta generada con contexto del código
@@ -111,10 +112,22 @@ class ChromaCollection():
         Note: Recupera 5 documentos similares y los usa como contexto.
         """
         # RETRIEVAL: Buscar los 5 documentos más similares
-        documents, _ = self.retrieve_k_similar_docs(query)
+        documents, results = self.retrieve_k_similar_docs(query)
+
+        if verbose:
+            print(f"✅ Encontrados {len(documents)} fragmentos relevantes")
+            print(f"\n📄 Fragmentos recuperados:")
+            for i, doc in enumerate(documents, 1):
+                preview = doc[:100].replace('\n', ' ') + "..." if len(doc) > 100 else doc.replace('\n', ' ')
+                print(f"   {i}. {preview}")
 
         # AUGMENTATION: Unir documentos en un solo contexto
         information = "\n".join(documents)
+
+        if verbose:
+            print(f"\n⏳ Paso 2/3: Construyendo prompt con contexto...")
+            print(f"   • Longitud del contexto: {len(information)} caracteres")
+            print(f"   • Fragmentos incluidos: {len(documents)}")
 
         # Construir prompt con system + user message
         messages = [
@@ -133,10 +146,19 @@ class ChromaCollection():
         ]
 
         # GENERATION: Llamar a OpenAI para generar respuesta
+        if verbose:
+            print(f"\n⏳ Paso 3/3: Generando respuesta con {model}...")
+            print(f"   • Tokens aproximados en contexto: ~{len(information) // 4}")
+
         response = self.openai_client.chat.completions.create(
             model=model,
             messages=messages
         )
+
+        if verbose:
+            print(f"✅ Respuesta generada exitosamente")
+            if hasattr(response, 'usage'):
+                print(f"   • Tokens usados: {response.usage.total_tokens if response.usage else 'N/A'}")
 
         content = response.choices[0].message.content
         return content
