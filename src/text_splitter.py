@@ -6,7 +6,8 @@ Funcionalidades:
 - Extracción y procesamiento de archivos ZIP
 - Filtrado automático de archivos soportados
 """
-
+import io
+import requests
 import os
 import sys
 import tempfile
@@ -16,8 +17,7 @@ from langchain_community.document_loaders.parsers import LanguageParser
 from langchain_community.document_loaders.blob_loaders import Blob
 from langchain_core.documents import Document
 
-from inserter import ChromaCollection
-from utils.language_detector import is_supported, detect_language
+from src.utils.language_detector import is_supported, detect_language
 
 
 def parse_file(filepath: str, parser_threshold: int = 3) -> list[Document]:
@@ -96,57 +96,18 @@ def load_from_zipfile(zippath: str, parser_threshold: int = 3) -> list[Document]
 
     return all_documents
 
-
-if __name__ == "__main__":
-    """
-    Script principal para indexar un codebase desde ZIP.
-
-    Uso: python text_splitter.py <nombre_coleccion> <ruta_zip>
-    Ejemplo: python text_splitter.py mi_proyecto ./codebase.zip
-    """
-    if len(sys.argv) < 3:
-        print("Uso: python text_splitter.py <nombre_coleccion> <ruta_zip>")
-        sys.exit(1)
-
-    collection_name = sys.argv[1]
-    zip_path = sys.argv[2]
-
-    # Validar que existe el ZIP
-    if not os.path.exists(zip_path):
-        print(f"Error: No se encontró el archivo {zip_path}")
-        sys.exit(1)
-
-    print(f"\n{'='*60}")
-    print(f"Indexando codebase: {zip_path}")
-    print(f"Colección: {collection_name}")
-    print(f"{'='*60}\n")
-
-    # Inicializar colección
-    chroma = ChromaCollection(collection_name)
-
-    # Cargar documentos desde ZIP
-    print("Cargando archivos desde ZIP...")
-    docs = load_from_zipfile(zip_path)
-
-    if len(docs) == 0:
-        print("\n✗ No se encontraron documentos para indexar")
-        sys.exit(1)
-
-    print(f"\n{'='*60}")
-    print(f"Total de fragmentos a insertar: {len(docs)}")
-    print(f"{'='*60}\n")
-
-    # Insertar en ChromaDB
-    print("Insertando en ChromaDB...")
-    chroma.insert_docs(docs)
-    print("✓ Documentos insertados exitosamente\n")
-
-    # Hacer query de prueba
-    test_query = "¿Qué funcionalidades tiene este código?"
-    print(f"Query de prueba: '{test_query}'")
-    print(f"{'='*60}\n")
-
-    res = chroma.rag(query=test_query)
-    print("Respuesta:")
-    print(res)
-    print(f"\n{'='*60}")
+def load_from_github_link(github_link: str):
+    repo_url=github_link.rstrip("/")
+    if not repo_url.endswith(".zip"):
+        repo_url=repo_url.replace("github.com", "api.github.com/repos") + "/zipball/main"
+    response = requests.get(repo_url)
+    response.raise_for_status()
+    
+    zip_bytes=io.BytesIO(response.content)
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_zip:
+        tmp_zip.write(response.content)
+        tmp_zip_path=tmp_zip.name
+    
+    return load_from_zipfile(tmp_zip_path)
+    
