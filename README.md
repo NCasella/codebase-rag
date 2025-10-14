@@ -80,14 +80,22 @@ OPENAI_API_KEY=tu_api_key_aqui
 El script principal permite indexar una codebase desde un archivo zip y consultarla:
 
 ```bash
-python src/text_splitter.py <nombre_coleccion> <ruta_al_archivo_zip>
+python main.py -c <nombre_coleccion> --zip <ruta_al_archivo_zip> --promt <consulta>
 ```
 
 **Ejemplo:**
 ```bash
-python src/text_splitter.py mi_proyecto ./mi_codebase.zip
+python main.py -c mi_proyecto --zip ./mi_codebase.zip --prompt "Como funciona la autenticacion del proyecto?"
 ```
 
+El script tambien puede indexear una codebase dado un link de un repositorio Github:
+```bash
+python main.py -c <nombre_coleccion> --github_link <github_repo_url> --promt <consulta>
+```
+**Ejemplo:**
+```bash
+python main.py -c mi_proyecto --github_link https://github.com/miuser/micodigo --prompt "Como funciona la autenticacion del proyecto?"
+```
 Esto realizará:
 1. Crear una colección de ChromaDB llamada "mi_proyecto"
 2. Extraer y parsear todos los archivos soportados del zip
@@ -168,7 +176,7 @@ from src.inserter import ChromaCollection
 coleccion = ChromaCollection('mi_proyecto')
 
 # Consultar la codebase
-pregunta = "¿Cómo funciona el sistema de autenticación?"
+
 respuesta = coleccion.rag(pregunta, model="gpt-4o-mini")
 print(respuesta)
 
