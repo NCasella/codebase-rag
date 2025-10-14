@@ -20,7 +20,7 @@ _=load_dotenv(find_dotenv())
 
 # Función de embedding global: SentenceTransformer basado en BERT
 # Convierte texto a vectores de alta dimensionalidad para búsqueda semántica
-_embedding_function = SentenceTransformerEmbeddingFunction()
+embedding_function = SentenceTransformerEmbeddingFunction()
 
 # Cliente global de ChromaDB (base de datos vectorial)
 _chroma_client = chromadb.Client()
@@ -49,7 +49,7 @@ class ChromaCollection():
 
         TODO: Permitir diferentes clientes LLM (local, Anthropic, etc.)
         """
-        self._chroma_collection = _initialize_collection(collection_name=collection_name)
+        self.chroma_collection = _initialize_collection(collection_name=collection_name)
         self.openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     def retrieve_k_similar_docs(self, query: str, k: int = 5) -> tuple[list[str], dict]:
@@ -66,7 +66,7 @@ class ChromaCollection():
         TODO: Optimización batch - Procesar múltiples queries a la vez
               Cambiar a queries: list[str] y retornar [[docs_q1], [docs_q2], ...]
         """
-        results = self._chroma_collection.query(query_texts=[query], n_results=k, include=['documents', 'embeddings'])
+        results = self.chroma_collection.query(query_texts=[query], n_results=k, include=['documents', 'embeddings'])
         retrieved_documents = results['documents'][0]
         return retrieved_documents, results
     
@@ -89,7 +89,7 @@ class ChromaCollection():
             print("docs vacio")
             return
 
-        self._chroma_collection.add(
+        self.chroma_collection.add(
             ids=[str(uuid4()) for _ in docs],
             documents=[doc.page_content for doc in docs],
             metadatas=[doc.metadata for doc in docs]
@@ -123,7 +123,7 @@ class ChromaCollection():
                 "content": (
                     "You are an expert agent in coding. Users will ask questions involving a code base. "
                     "You will be shown the user's question and the relevant code involving the question. "
-                    "Use the information given to answer the user's question."
+                    "Use only the code snippets given to answer the user's question."
                 )
             },
             {
@@ -160,7 +160,7 @@ def _initialize_collection(collection_name: str) -> chromadb.Collection:
         # Crear nueva colección con función de embedding
         chroma_collection = _chroma_client.create_collection(
             name=collection_name,
-            embedding_function=_embedding_function
+            embedding_function=embedding_function
         )
     else:
         # Recuperar colección existente
