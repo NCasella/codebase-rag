@@ -1,0 +1,33 @@
+{
+  "name": "detailed",
+  "description": "Explicaciones exhaustivas y detalladas",
+
+  "prompt": {
+    "template": "detailed",
+    "include_metadata": true,
+    "max_context_length": 10000
+  },
+
+  "model": {
+    "name": "gpt-4.1-nano",
+    "temperature": 0.15,
+    "max_tokens": 1500,
+    "top_p": 1.0
+  },
+
+  "retrieval": {
+    "k_documents": 7,
+    "include_metadata": true,
+    "similarity_threshold": null
+  },
+
+  "text_splitting": {
+    "parser_threshold": 4
+  },
+
+  "embeddings": {
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "device": "cpu",
+    "normalize_embeddings": true
+  }
+}

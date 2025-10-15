@@ -96,18 +96,28 @@ def load_from_zipfile(zippath: str, parser_threshold: int = 3) -> list[Document]
 
     return all_documents
 
-def load_from_github_link(github_link: str):
+def load_from_github_link(github_link: str, parser_threshold: int = 3) -> list[Document]:
+    """
+    Descarga y parsea un repositorio de GitHub.
+
+    Args:
+        github_link: URL del repositorio de GitHub
+        parser_threshold: Tamaño mínimo de fragmentos de código
+
+    Returns:
+        Lista plana de Documents de todos los archivos parseados
+    """
     repo_url=github_link.rstrip("/")
     if not repo_url.endswith(".zip"):
         repo_url=repo_url.replace("github.com", "api.github.com/repos") + "/zipball/main"
     response = requests.get(repo_url)
     response.raise_for_status()
-    
+
     zip_bytes=io.BytesIO(response.content)
-    
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_zip:
         tmp_zip.write(response.content)
         tmp_zip_path=tmp_zip.name
-    
-    return load_from_zipfile(tmp_zip_path)
+
+    return load_from_zipfile(tmp_zip_path, parser_threshold=parser_threshold)
     

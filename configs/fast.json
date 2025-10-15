@@ -1,0 +1,33 @@
+{
+  "name": "fast",
+  "description": "Respuestas rápidas y económicas",
+
+  "prompt": {
+    "template": "concise",
+    "include_metadata": false,
+    "max_context_length": 4000
+  },
+
+  "model": {
+    "name": "gpt-3.5-turbo",
+    "temperature": 0.2,
+    "max_tokens": 500,
+    "top_p": 1.0
+  },
+
+  "retrieval": {
+    "k_documents": 3,
+    "include_metadata": false,
+    "similarity_threshold": 0.5
+  },
+
+  "text_splitting": {
+    "parser_threshold": 2
+  },
+
+  "embeddings": {
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "device": "cpu",
+    "normalize_embeddings": true
+  }
+}
