@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     print(f"\n📊 Colección: '{collection_name}'")
     print(f"⏳ Inicializando ChromaDB...")
-    chroma = ChromaCollection(collection_name)
+    chroma = ChromaCollection(collection_name, prompt_template="optimal")
     print(f"✅ ChromaDB inicializado")
 
     print(f"\n⏳ Generando embeddings y almacenando en ChromaDB...")
