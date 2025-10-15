@@ -15,6 +15,8 @@ from dotenv import load_dotenv, find_dotenv
 from langchain_core.documents import Document
 from uuid import uuid4
 
+from .prompt_loader import get_prompt_loader
+
 # Cargar variables de entorno (.env)
 _=load_dotenv(find_dotenv())
 
@@ -40,17 +42,37 @@ class ChromaCollection():
         >>> respuesta = collection.rag("¿cómo se define una función?")
     """
 
-    def __init__(self, collection_name: str) -> None:
+    def __init__(self, collection_name: str, prompt_template: str = "default") -> None:
         """
         Inicializa la colección de ChromaDB y el cliente de OpenAI.
 
         Args:
             collection_name: Nombre único para la colección
+            prompt_template: Nombre del template de prompt a usar
+                Opciones: default, detailed, concise, spanish, beginner_friendly
+
+        Raises:
+            ValueError: Si el prompt_template no existe
+
+        Example:
+            >>> collection = ChromaCollection("proyecto")  # Usa "default"
+            >>> collection = ChromaCollection("proyecto", prompt_template="spanish")
 
         TODO: Permitir diferentes clientes LLM (local, Anthropic, etc.)
         """
         self.chroma_collection = _initialize_collection(collection_name=collection_name)
         self.openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        self.prompt_loader = get_prompt_loader()
+
+        # Validar que el prompt existe
+        available = self.prompt_loader.list_prompts()
+        if prompt_template not in available:
+            raise ValueError(
+                f"Prompt template '{prompt_template}' no encontrado.\n"
+                f"Disponibles: {', '.join(available)}"
+            )
+
+        self.prompt_template = prompt_template
 
     def retrieve_k_similar_docs(self, query: str, k: int = 5) -> tuple[list[str], dict]:
         """
@@ -129,15 +151,14 @@ class ChromaCollection():
             print(f"   • Longitud del contexto: {len(information)} caracteres")
             print(f"   • Fragmentos incluidos: {len(documents)}")
 
+        # Cargar prompt desde archivo
+        system_prompt = self.prompt_loader.load(self.prompt_template)
+
         # Construir prompt con system + user message
         messages = [
             {
                 "role": "system",
-                "content": (
-                    "You are an expert agent in coding. Users will ask questions involving a code base. "
-                    "You will be shown the user's question and the relevant code involving the question. "
-                    "Use only the code snippets given to answer the user's question."
-                )
+                "content": system_prompt
             },
             {
                 "role": "user",
