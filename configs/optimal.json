@@ -1,0 +1,33 @@
+{
+  "name": "optimal",
+  "description": "Máxima calidad - mejor modelo y más documentos",
+
+  "prompt": {
+    "template": "optimal",
+    "include_metadata": true,
+    "max_context_length": 12000
+  },
+
+  "model": {
+    "name": "gpt-4o",
+    "temperature": 0.05,
+    "max_tokens": null,
+    "top_p": 0.9
+  },
+
+  "retrieval": {
+    "k_documents": 8,
+    "include_metadata": true,
+    "similarity_threshold": 0.3
+  },
+
+  "text_splitting": {
+    "parser_threshold": 5
+  },
+
+  "embeddings": {
+    "model_name": "sentence-transformers/all-mpnet-base-v2",
+    "device": "cpu",
+    "normalize_embeddings": true
+  }
+}

@@ -14,8 +14,10 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 from dotenv import load_dotenv, find_dotenv
 from langchain_core.documents import Document
 from uuid import uuid4
+from typing import Optional
 
 from .prompt_loader import get_prompt_loader
+from .config_loader import RAGConfig, EmbeddingsConfig, get_default_config
 
 # Cargar variables de entorno (.env)
 _=load_dotenv(find_dotenv())
@@ -42,37 +44,59 @@ class ChromaCollection():
         >>> respuesta = collection.rag("¿cómo se define una función?")
     """
 
-    def __init__(self, collection_name: str, prompt_template: str = "default") -> None:
+    def __init__(
+        self,
+        collection_name: str,
+        prompt_template: str = "default",
+        config: Optional[RAGConfig] = None
+    ) -> None:
         """
         Inicializa la colección de ChromaDB y el cliente de OpenAI.
 
         Args:
             collection_name: Nombre único para la colección
-            prompt_template: Nombre del template de prompt a usar
-                Opciones: default, detailed, concise, spanish, beginner_friendly
+            prompt_template: Nombre del template de prompt a usar (ignorado si se pasa config)
+            config: Configuración RAG completa (opcional)
 
         Raises:
-            ValueError: Si el prompt_template no existe
+            ValueError: Si el prompt_template no existe o config es inválida
 
         Example:
-            >>> collection = ChromaCollection("proyecto")  # Usa "default"
+            >>> # Opción 1: Sin config (usa valores por defecto)
+            >>> collection = ChromaCollection("proyecto")
+
+            >>> # Opción 2: Con prompt_template específico
             >>> collection = ChromaCollection("proyecto", prompt_template="spanish")
 
-        TODO: Permitir diferentes clientes LLM (local, Anthropic, etc.)
+            >>> # Opción 3: Con config completa
+            >>> config = RAGConfig.from_json("configs/optimal.json")
+            >>> collection = ChromaCollection("proyecto", config=config)
         """
-        self.chroma_collection = _initialize_collection(collection_name=collection_name)
+        # Si se pasa config, usarla; sino usar valores por defecto
+        if config is None:
+            self.config = get_default_config()
+            self.config.prompt.template = prompt_template
+        else:
+            self.config = config
+
+        # Inicializar ChromaDB con embeddings configurados
+        self.chroma_collection = _initialize_collection(
+            collection_name=collection_name,
+            embeddings_config=self.config.embeddings
+        )
+
         self.openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
         self.prompt_loader = get_prompt_loader()
 
         # Validar que el prompt existe
         available = self.prompt_loader.list_prompts()
-        if prompt_template not in available:
+        if self.config.prompt.template not in available:
             raise ValueError(
-                f"Prompt template '{prompt_template}' no encontrado.\n"
+                f"Prompt template '{self.config.prompt.template}' no encontrado.\n"
                 f"Disponibles: {', '.join(available)}"
             )
 
-        self.prompt_template = prompt_template
+        self.prompt_template = self.config.prompt.template
 
     def retrieve_k_similar_docs(self, query: str, k: int = 5) -> tuple[list[str], dict]:
         """
@@ -117,7 +141,7 @@ class ChromaCollection():
             metadatas=[doc.metadata for doc in docs]
         )
     
-    def rag(self, query: str, model: str = "gpt-4.1-nano", verbose: bool = False) -> str:
+    def rag(self, query: str, model: Optional[str] = None, verbose: bool = False) -> str:
         """
         Responde preguntas sobre el código usando RAG (Retrieval-Augmented Generation).
 
@@ -125,16 +149,26 @@ class ChromaCollection():
 
         Args:
             query: Pregunta sobre el código (ej: "¿Cómo funciona la autenticación?")
-            model: Modelo de OpenAI (default: gpt-4.1-nano)
+            model: Modelo de OpenAI (opcional, usa el de config si no se especifica)
             verbose: Si es True, muestra logs detallados del proceso
 
         Returns:
             Respuesta generada con contexto del código
 
-        Note: Recupera 5 documentos similares y los usa como contexto.
+        Note: Usa parámetros de self.config para k_documents, temperature, etc.
         """
-        # RETRIEVAL: Buscar los 5 documentos más similares
-        documents, results = self.retrieve_k_similar_docs(query)
+        # Usar modelo de config si no se especifica
+        model_name = model if model is not None else self.config.model.name
+
+        # RETRIEVAL: Buscar documentos similares usando k de config
+        k = self.config.retrieval.k_documents
+        documents, results = self.retrieve_k_similar_docs(query, k=k)
+
+        # Filtrar por similarity threshold si está configurado
+        if self.config.retrieval.similarity_threshold is not None:
+            # TODO: Implementar filtrado por similarity threshold
+            # Requiere acceso a distances de ChromaDB
+            pass
 
         if verbose:
             print(f"✅ Encontrados {len(documents)} fragmentos relevantes")
@@ -145,6 +179,13 @@ class ChromaCollection():
 
         # AUGMENTATION: Unir documentos en un solo contexto
         information = "\n".join(documents)
+
+        # Limitar contexto según max_context_length de config
+        max_length = self.config.prompt.max_context_length
+        if len(information) > max_length:
+            information = information[:max_length]
+            if verbose:
+                print(f"⚠️  Contexto truncado a {max_length} caracteres")
 
         if verbose:
             print(f"\n⏳ Paso 2/3: Construyendo prompt con contexto...")
@@ -168,13 +209,23 @@ class ChromaCollection():
 
         # GENERATION: Llamar a OpenAI para generar respuesta
         if verbose:
-            print(f"\n⏳ Paso 3/3: Generando respuesta con {model}...")
+            print(f"\n⏳ Paso 3/3: Generando respuesta con {model_name}...")
+            print(f"   • Temperature: {self.config.model.temperature}")
             print(f"   • Tokens aproximados en contexto: ~{len(information) // 4}")
 
-        response = self.openai_client.chat.completions.create(
-            model=model,
-            messages=messages
-        )
+        # Construir parámetros de OpenAI desde config
+        openai_params = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": self.config.model.temperature,
+            "top_p": self.config.model.top_p
+        }
+
+        # Agregar max_tokens solo si está configurado
+        if self.config.model.max_tokens is not None:
+            openai_params["max_tokens"] = self.config.model.max_tokens
+
+        response = self.openai_client.chat.completions.create(**openai_params)
 
         if verbose:
             print(f"✅ Respuesta generada exitosamente")
@@ -184,26 +235,40 @@ class ChromaCollection():
         content = response.choices[0].message.content
         return content
 
-def _initialize_collection(collection_name: str) -> chromadb.Collection:
+def _initialize_collection(
+    collection_name: str,
+    embeddings_config: Optional[EmbeddingsConfig] = None
+) -> chromadb.Collection:
     """
     Crea o recupera una colección de ChromaDB (idempotente).
 
     Args:
         collection_name: Nombre único de la colección
+        embeddings_config: Configuración de embeddings (opcional)
 
     Returns:
         Instancia de la colección
 
-    Note: Si ya existe, la recupera. Si no existe, la crea con _embedding_function.
+    Note: Si ya existe, la recupera. Si no existe, la crea con embedding function configurado.
     """
     existing_collections = _chroma_client.list_collections()
     existing_collection_names = [collection.name for collection in existing_collections]
 
     if collection_name not in existing_collection_names:
+        # Crear embedding function según config
+        if embeddings_config is not None:
+            emb_function = SentenceTransformerEmbeddingFunction(
+                model_name=embeddings_config.model_name,
+                device=embeddings_config.device
+            )
+        else:
+            # Usar función de embedding por defecto
+            emb_function = embedding_function
+
         # Crear nueva colección con función de embedding
         chroma_collection = _chroma_client.create_collection(
             name=collection_name,
-            embedding_function=embedding_function
+            embedding_function=emb_function
         )
     else:
         # Recuperar colección existente

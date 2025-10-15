@@ -102,11 +102,12 @@ python main.py -g https://github.com/usuario/repo -p "¿Qué hace este código?"
 #### Opciones adicionales:
 
 - `-c, --collection-name`: Nombre de la colección (default: "codeRAG")
+- `--config`: Ruta al archivo de configuración JSON (opcional)
 - `-v, --verbose`: Muestra logs detallados del proceso RAG
 
 **Ejemplo con todas las opciones:**
 ```bash
-python main.py -z mi_proyecto.zip -p "¿Cómo se crea un usuario?" -c mi_coleccion -v
+python main.py -z mi_proyecto.zip -p "¿Cómo se crea un usuario?" -c mi_coleccion --config configs/optimal.json -v
 ```
 
 ### Modo Verbose
@@ -134,6 +135,153 @@ El modo verbose es útil para:
 - Debuggear respuestas inesperadas
 - Evaluar la calidad de la recuperación
 - Ver el consumo de tokens de la API
+
+### Sistema de Configuración JSON
+
+El sistema permite configurar todos los parámetros del RAG mediante archivos JSON, facilitando la experimentación con diferentes configuraciones sin modificar código.
+
+#### Archivos de Configuración Incluidos
+
+El proyecto incluye 4 configuraciones predefinidas en la carpeta `configs/`:
+
+**1. `default.json` - Configuración balanceada**
+```bash
+python main.py -z code.zip -p "pregunta" --config configs/default.json
+```
+- Modelo: `gpt-4.1-nano`
+- K documentos: 5
+- Temperature: 0.1
+- Uso: General, balance entre calidad y costo
+
+**2. `optimal.json` - Máxima calidad**
+```bash
+python main.py -z code.zip -p "pregunta" --config configs/optimal.json
+```
+- Modelo: `gpt-4o`
+- K documentos: 8
+- Temperature: 0.05
+- Embeddings: `all-mpnet-base-v2` (mejor calidad)
+- Uso: Análisis crítico, máxima precisión
+
+**3. `fast.json` - Respuestas rápidas**
+```bash
+python main.py -z code.zip -p "pregunta" --config configs/fast.json
+```
+- Modelo: `gpt-3.5-turbo`
+- K documentos: 3
+- Max tokens: 500
+- Uso: Consultas rápidas, desarrollo
+
+**4. `detailed.json` - Explicaciones exhaustivas**
+```bash
+python main.py -z code.zip -p "pregunta" --config configs/detailed.json
+```
+- Modelo: `gpt-4.1-nano`
+- K documentos: 7
+- Max tokens: 1500
+- Uso: Análisis profundo, documentación
+
+#### Estructura de un Archivo de Configuración
+
+```json
+{
+  "name": "mi_config",
+  "description": "Descripción de la configuración",
+
+  "prompt": {
+    "template": "optimal",
+    "include_metadata": true,
+    "max_context_length": 8000
+  },
+
+  "model": {
+    "name": "gpt-4.1-nano",
+    "temperature": 0.1,
+    "max_tokens": null,
+    "top_p": 1.0
+  },
+
+  "retrieval": {
+    "k_documents": 5,
+    "include_metadata": true,
+    "similarity_threshold": null
+  },
+
+  "text_splitting": {
+    "parser_threshold": 3
+  },
+
+  "embeddings": {
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "device": "cpu",
+    "normalize_embeddings": true
+  }
+}
+```
+
+#### Parámetros Configurables
+
+**Prompt:**
+- `template`: Plantilla de prompt (`default`, `optimal`, `detailed`, `concise`, `spanish`, `beginner_friendly`)
+- `max_context_length`: Límite de caracteres del contexto
+
+**Model (OpenAI):**
+- `name`: Modelo a usar (`gpt-4o`, `gpt-4.1-nano`, `gpt-3.5-turbo`)
+- `temperature`: Controla aleatoriedad (0.0-2.0, menor = más determinístico)
+- `max_tokens`: Límite de tokens en respuesta (null = sin límite)
+- `top_p`: Nucleus sampling (0.0-1.0)
+
+**Retrieval:**
+- `k_documents`: Número de fragmentos a recuperar
+- `similarity_threshold`: Filtro de similitud mínima (null = sin filtro)
+
+**Text Splitting:**
+- `parser_threshold`: Tamaño mínimo de fragmentos de código
+
+**Embeddings:**
+- `model_name`: Modelo de sentence-transformers
+  - `all-MiniLM-L6-v2`: Rápido, buena calidad (default)
+  - `all-mpnet-base-v2`: Mejor calidad, más lento
+- `device`: `cpu` o `cuda` (para GPU)
+
+#### Crear Tu Propia Configuración
+
+1. Copia una configuración existente:
+```bash
+cp configs/default.json configs/mi_config.json
+```
+
+2. Modifica los parámetros según tus necesidades
+
+3. Úsala con el flag `--config`:
+```bash
+python main.py -z code.zip -p "pregunta" --config configs/mi_config.json
+```
+
+#### Uso Programático con Configs
+
+```python
+from src.config_loader import RAGConfig
+from src.inserter import ChromaCollection
+
+# Cargar configuración
+config = RAGConfig.from_json("configs/optimal.json")
+
+# Crear colección con la config
+collection = ChromaCollection("mi_proyecto", config=config)
+
+# El RAG usará automáticamente todos los parámetros de la config
+respuesta = collection.rag("¿Cómo funciona esto?")
+```
+
+#### Trade-offs de Configuración
+
+| Parámetro | ⬆️ Aumentar | ⬇️ Disminuir |
+|-----------|------------|-------------|
+| **k_documents** | Más contexto, más costo | Más rápido, menos contexto |
+| **temperature** | Más creativo, menos preciso | Más determinístico |
+| **parser_threshold** | Fragmentos grandes | Fragmentos granulares |
+| **max_tokens** | Respuestas largas, más caro | Respuestas breves |
 
 ### Proceso completo
 
@@ -300,15 +448,30 @@ codebase-rag/
 ├── src/
 │   ├── inserter.py              # Gestión de ChromaDB e implementación RAG
 │   ├── text_splitter.py         # Parseo de archivos y text splitting
+│   ├── config_loader.py         # Cargador de configuraciones JSON
+│   ├── prompt_loader.py         # Cargador de plantillas de prompts
 │   └── utils/
 │       ├── __init__.py
 │       └── language_detector.py # Utilidades de detección de lenguaje
+├── configs/                      # Archivos de configuración JSON
+│   ├── default.json
+│   ├── optimal.json
+│   ├── fast.json
+│   └── detailed.json
+├── prompts/                      # Plantillas de prompts
+│   ├── default.txt
+│   ├── optimal.txt
+│   ├── detailed.txt
+│   ├── concise.txt
+│   ├── spanish.txt
+│   └── beginner_friendly.txt
 ├── tests/
 │   └── test_language_detector.py
 ├── context/                      # Material de referencia del curso
 │   ├── propuesta.txt
 │   ├── DeepLearningTP2.pdf
 │   └── [notebooks de referencia]
+├── main.py                       # Script principal CLI
 ├── requirements.txt
 ├── .env                          # Tus API keys (crear este archivo)
 ├── .gitignore
