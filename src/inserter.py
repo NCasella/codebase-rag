@@ -4,12 +4,12 @@ Gestión de ChromaDB y RAG para consultas sobre código.
 Funcionalidades:
 - Almacenar fragmentos de código con embeddings vectoriales
 - Búsqueda semántica de documentos similares
-- Generación de respuestas contextuales con OpenAI
+- Generación de respuestas contextuales con el LLM a elección
 """
 
 import os
 import chromadb
-from openai import OpenAI
+from src.llm.factory import create_llm, Provider, GoogleModel, OpenAIModel
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 from dotenv import load_dotenv, find_dotenv
 from langchain_core.documents import Document
@@ -36,7 +36,7 @@ class ChromaCollection():
 
     Attributes:
         _chroma_collection: Colección de ChromaDB
-        openai_client: Cliente de OpenAI
+        llm_client: Cliente de LLM (Google Gemini u OpenAI)
 
     Example:
         >>> collection = ChromaCollection('mi_proyecto')
@@ -51,7 +51,7 @@ class ChromaCollection():
         config: Optional[RAGConfig] = None
     ) -> None:
         """
-        Inicializa la colección de ChromaDB y el cliente de OpenAI.
+        Inicializa la colección de ChromaDB y el cliente LLM.
 
         Args:
             collection_name: Nombre único para la colección
@@ -85,7 +85,11 @@ class ChromaCollection():
             embeddings_config=self.config.embeddings
         )
 
-        self.openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        self.llm_client = create_llm(
+            provider=Provider.OPENAI,
+            model=OpenAIModel.GPT_5_MINI,
+            api_key=os.environ["OPENAI_API_KEY"]
+        )
         self.prompt_loader = get_prompt_loader()
 
         # Validar que el prompt existe
@@ -149,7 +153,7 @@ class ChromaCollection():
 
         Args:
             query: Pregunta sobre el código (ej: "¿Cómo funciona la autenticación?")
-            model: Modelo de OpenAI (opcional, usa el de config si no se especifica)
+            model: Modelo de LLM (opcional, usa el de config si no se especifica)
             verbose: Si es True, muestra logs detallados del proceso
 
         Returns:
@@ -196,6 +200,7 @@ class ChromaCollection():
         system_prompt = self.prompt_loader.load(self.prompt_template)
 
         # Construir prompt con system + user message
+        # TODO sanitize! UNICODE 
         messages = [
             {
                 "role": "system",
@@ -207,15 +212,15 @@ class ChromaCollection():
             }
         ]
 
-        # GENERATION: Llamar a OpenAI para generar respuesta
+        # GENERATION: Llamar al LLM para generar respuesta
         if verbose:
-            print(f"\n⏳ Paso 3/3: Generando respuesta con {model_name}...")
+            print(f"\n⏳ Paso 3/3: Generando respuesta con {self.llm_client.model}...")
             print(f"   • Temperature: {self.config.model.temperature}")
             print(f"   • Tokens aproximados en contexto: ~{len(information) // 4}")
 
-        # Construir parámetros de OpenAI desde config
-        openai_params = {
-            "model": model_name,
+        # Construir parámetros del LLM desde config
+        llm_params = {
+            # "model": model_name,
             "messages": messages,
             "temperature": self.config.model.temperature,
             "top_p": self.config.model.top_p
@@ -223,16 +228,21 @@ class ChromaCollection():
 
         # Agregar max_tokens solo si está configurado
         if self.config.model.max_tokens is not None:
-            openai_params["max_tokens"] = self.config.model.max_tokens
+            llm_params["max_tokens"] = self.config.model.max_tokens
 
-        response = self.openai_client.chat.completions.create(**openai_params)
+        response = self.llm_client.generate(
+            messages=messages,
+            temperature=self.config.model.temperature,
+            top_p=self.config.model.top_p,
+        )
+        # response = self.openai_client.chat.completions.create(**openai_params)
 
         if verbose:
             print(f"✅ Respuesta generada exitosamente")
             if hasattr(response, 'usage'):
                 print(f"   • Tokens usados: {response.usage.total_tokens if response.usage else 'N/A'}")
 
-        content = response.choices[0].message.content
+        content = response.text
         return content
 
 def _initialize_collection(
