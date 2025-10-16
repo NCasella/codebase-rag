@@ -142,6 +142,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.example
 .envrc
 .venv
 env/
@@ -234,3 +235,6 @@ test_rag.py
 # Temporary files
 temp/
 tmp/
+
+# Venv folders
+Scripts/
