@@ -109,7 +109,7 @@ def load_from_github_link(github_link: str, parser_threshold: int = 3) -> list[D
     """
     repo_url=github_link.rstrip("/")
     if not repo_url.endswith(".zip"):
-        repo_url=repo_url.replace("github.com", "api.github.com/repos") + "/zipball/main"
+        repo_url=repo_url.replace("github.com", "api.github.com/repos") + "/zipball/"
     response = requests.get(repo_url)
     response.raise_for_status()
 
