@@ -116,7 +116,7 @@ class ChromaCollection():
         TODO: Optimización batch - Procesar múltiples queries a la vez
               Cambiar a queries: list[str] y retornar [[docs_q1], [docs_q2], ...]
         """
-        results = self.chroma_collection.query(query_texts=[query], n_results=k, include=['documents', 'embeddings'])
+        results = self.chroma_collection.query(query_texts=[query], n_results=k, include=['metadatas','documents', 'embeddings'])
         retrieved_documents = results['documents'][0]
         return retrieved_documents, results
     
@@ -161,14 +161,11 @@ class ChromaCollection():
 
         Note: Usa parámetros de self.config para k_documents, temperature, etc.
         """
-        # Usar modelo de config si no se especifica
         model_name = model if model is not None else self.config.model.name
 
-        # RETRIEVAL: Buscar documentos similares usando k de config
         k = self.config.retrieval.k_documents
         documents, results = self.retrieve_k_similar_docs(query, k=k)
 
-        # Filtrar por similarity threshold si está configurado
         if self.config.retrieval.similarity_threshold is not None:
             # TODO: Implementar filtrado por similarity threshold
             # Requiere acceso a distances de ChromaDB
@@ -271,17 +268,22 @@ def _initialize_collection(
                 model_name=embeddings_config.model_name,
                 device=embeddings_config.device
             )
+            distance_function=embeddings_config.distance_function
         else:
             # Usar función de embedding por defecto
             emb_function = embedding_function
+            distance_function="l2"
 
         # Crear nueva colección con función de embedding
         chroma_collection = _chroma_client.create_collection(
             name=collection_name,
-            embedding_function=emb_function
+            embedding_function=emb_function,configuration={
+                "hnsw":{
+                    "space":distance_function
+                    }
+            }
         )
     else:
-        # Recuperar colección existente
         chroma_collection = _chroma_client.get_collection(name=collection_name)
 
     return chroma_collection
