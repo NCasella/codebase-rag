@@ -85,10 +85,45 @@ class ChromaCollection():
             embeddings_config=self.config.embeddings
         )
 
+        # Configurar provider y modelo desde config
+        provider_str = self.config.model.provider.lower()
+        model_name = self.config.model.name
+
+        # Determinar provider enum
+        try:
+            provider_enum = Provider(provider_str)
+        except ValueError:
+            # Fallback a Google con advertencia
+            print(f"⚠️  Advertencia: Provider '{provider_str}' no válido. Usando fallback: Google Gemini")
+            provider_enum = Provider.GOOGLE
+            model_name = GoogleModel.GEMINI_2_5_FLASH_LITE
+
+        # Determinar API key según provider
+        if provider_enum == Provider.GOOGLE:
+            api_key_env = "GEMINI_API_KEY"
+        elif provider_enum == Provider.OPENAI:
+            api_key_env = "OPENAI_API_KEY"
+        else:
+            api_key_env = None
+
+        # Obtener API key o usar fallback
+        api_key = os.environ.get(api_key_env) if api_key_env else None
+        if not api_key:
+            print(f"⚠️  Advertencia: {api_key_env} no encontrado. Usando fallback: Google Gemini")
+            provider_enum = Provider.GOOGLE
+            model_name = GoogleModel.GEMINI_2_5_FLASH_LITE
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "No se encontró ninguna API key válida. "
+                    "Configure GEMINI_API_KEY o OPENAI_API_KEY en su .env"
+                )
+
+        # Crear cliente LLM
         self.llm_client = create_llm(
-            provider=Provider.OPENAI,
-            model=OpenAIModel.GPT_5_MINI,
-            api_key=os.environ["OPENAI_API_KEY"]
+            provider=provider_enum,
+            model=model_name,
+            api_key=api_key
         )
         self.prompt_loader = get_prompt_loader()
 
@@ -236,8 +271,11 @@ class ChromaCollection():
 
         if verbose:
             print(f"✅ Respuesta generada exitosamente")
-            if hasattr(response, 'usage'):
-                print(f"   • Tokens usados: {response.usage.total_tokens if response.usage else 'N/A'}")
+            if response.usage:
+                prompt_tok = response.usage.get('prompt_tokens', 'N/A')
+                completion_tok = response.usage.get('completion_tokens', 'N/A')
+                total_tok = response.usage.get('total_tokens', 'N/A')
+                print(f"   • Tokens usados: {total_tok} total ({prompt_tok} prompt + {completion_tok} completion)")
 
         content = response.text
         return content

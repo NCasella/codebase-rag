@@ -22,7 +22,8 @@ class PromptConfig:
 @dataclass
 class ModelConfig:
     """Configuración del modelo LLM."""
-    name: str = "gpt-4.1-nano"
+    provider: str = "google"
+    name: str = "gemini-2.5-flash-lite"
     temperature: float = 0.1
     max_tokens: Optional[int] = None
     top_p: float = 1.0
@@ -144,6 +145,10 @@ class RAGConfig:
             ValueError: Si algún parámetro es inválido
         """
         # Validar model
+        valid_providers = ["google", "openai"]
+        if self.model.provider.lower() not in valid_providers:
+            raise ValueError(f"provider debe ser uno de {valid_providers}, got '{self.model.provider}'")
+
         if self.model.temperature < 0 or self.model.temperature > 2:
             raise ValueError(f"temperature debe estar entre 0 y 2, got {self.model.temperature}")
 
@@ -185,6 +190,7 @@ class RAGConfig:
                 'max_context_length': self.prompt.max_context_length
             },
             'model': {
+                'provider': self.model.provider,
                 'name': self.model.name,
                 'temperature': self.model.temperature,
                 'max_tokens': self.model.max_tokens,
@@ -210,7 +216,7 @@ class RAGConfig:
         return (
             f"RAGConfig(name='{self.name}')\n"
             f"  • Prompt: {self.prompt.template}\n"
-            f"  • Model: {self.model.name} (temp={self.model.temperature})\n"
+            f"  • Model: {self.model.provider}/{self.model.name} (temp={self.model.temperature})\n"
             f"  • Retrieval: k={self.retrieval.k_documents}\n"
             f"  • Embeddings: {self.embeddings.model_name}"
         )
