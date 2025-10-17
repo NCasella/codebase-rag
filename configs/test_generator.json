@@ -1,0 +1,33 @@
+{
+  "name": "test_generator",
+  "description": "Configuración optimizada para generar código de tests unitarios y de integración",
+
+  "prompt": {
+    "template": "test_generator",
+    "include_metadata": true,
+    "max_context_length": 12000
+  },
+
+  "model": {
+    "name": "gpt-4o",
+    "temperature": 0.2,
+    "max_tokens": 2000,
+    "top_p": 0.95
+  },
+
+  "retrieval": {
+    "k_documents": 7,
+    "include_metadata": true,
+    "similarity_threshold": null
+  },
+
+  "text_splitting": {
+    "parser_threshold": 4
+  },
+
+  "embeddings": {
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "device": "cpu",
+    "normalize_embeddings": true
+  }
+}
