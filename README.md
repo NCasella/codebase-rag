@@ -52,8 +52,8 @@ El sistema consta de tres componentes principales:
 
 ### Prerequisitos
 
-- Python 3.8 o superior
-- OpenAI API key
+- Python 3.11 o superior
+- OpenAI API key o Gemini API key
 
 ### Configuración
 
@@ -214,7 +214,8 @@ python main.py -z code.zip -p "pregunta" --config configs/detailed.json
   "embeddings": {
     "model_name": "sentence-transformers/all-MiniLM-L6-v2",
     "device": "cpu",
-    "normalize_embeddings": true
+    "normalize_embeddings": true,
+    "distance_function": "l2"
   }
 }
 ```
@@ -243,6 +244,10 @@ python main.py -z code.zip -p "pregunta" --config configs/detailed.json
   - `all-MiniLM-L6-v2`: Rápido, buena calidad (default)
   - `all-mpnet-base-v2`: Mejor calidad, más lento
 - `device`: `cpu` o `cuda` (para GPU)
+- `distance_function`:
+  - `l2`: Distancia euclideana. El valor default
+  - `cosine`: Similitud coseno
+  - `ip`: Producto escalar
 
 #### Crear Tu Propia Configuración
 
@@ -523,8 +528,7 @@ Ver [requirements.txt](requirements.txt) para la lista completa.
 
 ## Limitaciones Actuales
 
-- Requiere OpenAI API key (implica costos por uso de API)
-- Actualmente solo soporta entrada de archivos zip para procesamiento batch
+- Requiere OpenAI O Gemini API key (implica costos por uso de API)
 - Los archivos binarios e imágenes no son soportados
 - El rendimiento depende del tamaño de la codebase y el tamaño de fragmento elegido
 - La calidad de las respuestas depende de la relevancia de los fragmentos recuperados
@@ -532,8 +536,8 @@ Ver [requirements.txt](requirements.txt) para la lista completa.
 ## Mejoras Futuras
 
 - Soporte para modelos de embedding adicionales (opciones locales/open-source)
-- Procesamiento directo de carpetas/directorios sin necesidad de archivos zip
-- Integración con GitHub para descargar repositorios directamente
+
+
 - Interfaz web para consultas más fáciles
 - Soporte para actualizaciones incrementales de colecciones existentes
 - Filtrado avanzado y búsqueda por metadata
@@ -541,9 +545,7 @@ Ver [requirements.txt](requirements.txt) para la lista completa.
 - Análisis de code coverage y generación de tests
 - Soporte multi-modal para diagramas e imágenes de documentación
 
-## Trabajo Práctico
 
-Este proyecto fue desarrollado como parte del Trabajo Práctico 2 de la materia "Temas Avanzados de Deep Learning 2025" de la Universidad de Buenos Aires.
 
 ### Objetivos Cubiertos
 
@@ -556,7 +558,3 @@ Este proyecto fue desarrollado como parte del Trabajo Práctico 2 de la materia 
 ## Licencia
 
 Este proyecto se proporciona tal cual para fines educativos y de desarrollo.
-
-## Contribuciones
-
-Las contribuciones son bienvenidas. Por favor, siéntete libre de enviar issues o pull requests.
