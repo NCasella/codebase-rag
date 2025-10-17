@@ -1,29 +1,28 @@
 {
-  "name": "test_gen",
-  "description": "Configuración para generacion de tests",
+  "name": "test_generator",
+  "description": "Configuración optimizada para generar código de tests unitarios y de integración",
 
   "prompt": {
-    "template": "test_gen",
+    "template": "test_generator",
     "include_metadata": true,
-    "max_context_length": 8000
-
+    "max_context_length": 12000
   },
 
   "model": {
-    "name": "gpt-4.1-nano",
-    "temperature": 0.1,
-    "max_tokens": null,
-    "top_p": 1.0
+    "name": "gpt-4o",
+    "temperature": 0.2,
+    "max_tokens": 2000,
+    "top_p": 0.95
   },
 
   "retrieval": {
-    "k_documents": 30,
+    "k_documents": 7,
     "include_metadata": true,
     "similarity_threshold": null
   },
 
   "text_splitting": {
-    "parser_threshold": 3
+    "parser_threshold": 4
   },
 
   "embeddings": {
