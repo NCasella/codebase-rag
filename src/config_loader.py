@@ -46,6 +46,7 @@ class TextSplittingConfig:
 class EmbeddingsConfig:
     """Configuración de embeddings."""
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    distance_function:str = "l2"
     device: str = "cpu"
     normalize_embeddings: bool = True
 
