@@ -253,13 +253,15 @@ def main():
     print("PHASE 4: COLLECTING EVALUATION DATA")
     print(f"{'='*60}\n")
 
-    # Extract queries and references
+    # Extract queries and references (keep partial references, don't drop)
     queries = [q.question for q in test_queries]
-    references = [q.reference for q in test_queries if q.reference]
+    references = [q.reference if q.reference else None for q in test_queries]
 
-    # If not all queries have references, set to None
-    if len(references) < len(queries):
-        references = None
+    # Count references for reporting
+    ref_count = sum(1 for r in references if r is not None)
+    if ref_count < len(queries):
+        print(f"   ⚠️  Partial references: {ref_count}/{len(queries)} queries have ground truth")
+        print(f"   Reference-requiring metrics will only evaluate on {ref_count} samples")
 
     print(f"⏳ Running {len(queries)} queries through RAG pipeline...")
 

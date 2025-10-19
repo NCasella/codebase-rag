@@ -28,10 +28,12 @@ from ragas.metrics import (
 )
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.run_config import RunConfig
 
 # LangChain imports for LLM wrapping
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 # Local imports
 from src.llm import Provider
@@ -123,6 +125,12 @@ class EvaluationConfig:
     warn_on_missing_fields: bool = True
     stop_on_error: bool = False
     verbose: bool = False
+    run_config: Dict[str, Any] = field(default_factory=lambda: {
+        'max_workers': 2,
+        'max_wait': 180,
+        'max_retries': 3,
+        'timeout': 60
+    })
 
     @classmethod
     def from_json(cls, json_path: str) -> 'EvaluationConfig':
@@ -149,7 +157,8 @@ class EvaluationConfig:
             'require_reference': self.require_reference,
             'warn_on_missing_fields': self.warn_on_missing_fields,
             'stop_on_error': self.stop_on_error,
-            'verbose': self.verbose
+            'verbose': self.verbose,
+            'run_config': self.run_config
         }
 
 
@@ -182,6 +191,8 @@ class RAGASEvaluator:
             print(f"   Evaluator LLM: {self.config.evaluator_llm['provider']}/{self.config.evaluator_llm['model']}")
             print(f"   Embeddings: {self.config.evaluator_embeddings['model_name']}")
             print(f"   Metrics: {', '.join(self.config.metrics)}")
+            max_workers = self.config.run_config.get('max_workers', 2)
+            print(f"   Concurrency: max_workers={max_workers} (controls API rate)")
 
     def _create_evaluator_llm(self) -> LangchainLLMWrapper:
         """Create isolated evaluator LLM (separate from generation LLM)."""
@@ -221,16 +232,154 @@ class RAGASEvaluator:
         return LangchainLLMWrapper(llm)
 
     def _create_evaluator_embeddings(self) -> LangchainEmbeddingsWrapper:
-        """Create embeddings for evaluator."""
-        emb_config = self.config.evaluator_embeddings
+        """
+        Create embeddings for evaluator with provider auto-detection.
 
-        # For now, use OpenAI embeddings (RAGAS default)
-        # TODO: Support SentenceTransformer embeddings
-        embeddings = OpenAIEmbeddings(
-            model=emb_config.get('model_name', 'text-embedding-ada-002')
-        )
+        Supports:
+        - SentenceTransformers (via HuggingFaceEmbeddings)
+        - OpenAI embeddings (via OpenAIEmbeddings)
+
+        Provider is detected from model_name in config.
+        """
+        emb_config = self.config.evaluator_embeddings
+        model_name = emb_config.get('model_name', 'sentence-transformers/all-MiniLM-L6-v2')
+
+        if self.config.verbose:
+            print(f"   Initializing embeddings: {model_name}")
+
+        # Detect provider from model name
+        if model_name.startswith('sentence-transformers/'):
+            # HuggingFace SentenceTransformers
+            if self.config.verbose:
+                print(f"   Using HuggingFaceEmbeddings")
+
+            embeddings = HuggingFaceEmbeddings(
+                model_name=model_name,
+                model_kwargs={'device': emb_config.get('device', 'cpu')},
+                encode_kwargs={'normalize_embeddings': emb_config.get('normalize_embeddings', True)}
+            )
+
+        elif 'embedding' in model_name.lower() or model_name.startswith('text-embedding'):
+            # OpenAI embeddings
+            if self.config.verbose:
+                print(f"   Using OpenAIEmbeddings")
+
+            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                raise ValueError(
+                    "OpenAI embeddings require OPENAI_API_KEY environment variable.\n"
+                    f"Model '{model_name}' detected as OpenAI model but API key not found.\n"
+                    "Please add OPENAI_API_KEY to your .env file or switch to a "
+                    "SentenceTransformers model (e.g., 'sentence-transformers/all-MiniLM-L6-v2')"
+                )
+
+            embeddings = OpenAIEmbeddings(
+                model=model_name,
+                api_key=api_key
+            )
+
+        else:
+            raise ValueError(
+                f"Unknown embedding model type: '{model_name}'\n"
+                f"Supported formats:\n"
+                f"  - SentenceTransformers: 'sentence-transformers/MODEL_NAME'\n"
+                f"  - OpenAI: models containing 'embedding' (e.g., 'text-embedding-ada-002')"
+            )
 
         return LangchainEmbeddingsWrapper(embeddings)
+
+    def _to_ragas_schema(self, samples: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Convert internal sample schema to RAGAS-compatible format.
+
+        Handles various input formats and normalizes to RAGAS expected keys:
+        - user_input (query/question)
+        - response (answer)
+        - retrieved_contexts (contexts)
+        - reference (ground_truth) [optional]
+
+        Args:
+            samples: List of evaluation samples with varying schemas
+
+        Returns:
+            List of samples with standardized RAGAS-compatible keys
+        """
+        ragas_samples = []
+
+        for i, sample in enumerate(samples):
+            # Normalize user input
+            user_input = sample.get('user_input') or sample.get('question') or sample.get('query')
+            if not user_input:
+                raise ValueError(f"Sample {i} missing user input (tried: user_input, question, query)")
+
+            # Normalize response
+            response = sample.get('response') or sample.get('answer')
+            if not response:
+                raise ValueError(f"Sample {i} missing response (tried: response, answer)")
+
+            # Normalize contexts
+            contexts = sample.get('retrieved_contexts') or sample.get('contexts') or []
+            if not isinstance(contexts, list):
+                contexts = [contexts]
+
+            # Build RAGAS sample
+            ragas_sample = {
+                'user_input': user_input,
+                'response': response,
+                'retrieved_contexts': contexts
+            }
+
+            # Add reference if present (support None for partial references)
+            reference = sample.get('reference') or sample.get('ground_truth')
+            if reference:
+                ragas_sample['reference'] = reference
+
+            ragas_samples.append(ragas_sample)
+
+        return ragas_samples
+
+    def _extract_results(self, ragas_output) -> Tuple[Dict[str, float], pd.DataFrame]:
+        """
+        Robustly extract aggregate scores and per-sample dataframe from RAGAS output.
+
+        Handles both Result objects and dict outputs across RAGAS versions.
+
+        Args:
+            ragas_output: Output from ragas.evaluate()
+
+        Returns:
+            (aggregate_scores, per_sample_dataframe)
+        """
+        # Extract aggregate scores
+        if hasattr(ragas_output, 'items'):
+            # Dict-like interface
+            scores = {k: v for k, v in ragas_output.items() if k != 'ragas_score'}
+        elif hasattr(ragas_output, '__dict__'):
+            # Object with attributes
+            scores = {k: v for k, v in vars(ragas_output).items()
+                     if isinstance(v, (int, float)) and k != 'ragas_score'}
+        else:
+            scores = {}
+
+        # Extract per-sample dataframe
+        df = pd.DataFrame()
+        try:
+            if hasattr(ragas_output, 'to_pandas'):
+                df = ragas_output.to_pandas()
+            elif hasattr(ragas_output, 'dataset'):
+                if hasattr(ragas_output.dataset, 'to_pandas'):
+                    df = ragas_output.dataset.to_pandas()
+                elif isinstance(ragas_output.dataset, list):
+                    df = pd.DataFrame(ragas_output.dataset)
+            elif hasattr(ragas_output, 'scores'):
+                # Some versions have scores as dataframe
+                if isinstance(ragas_output.scores, pd.DataFrame):
+                    df = ragas_output.scores
+        except Exception as e:
+            if self.config.verbose:
+                print(f"   ⚠️  Could not extract per-sample dataframe: {e}")
+
+        return scores, df
 
     def validate_dataset(
         self,
@@ -418,29 +567,40 @@ class RAGASEvaluator:
         # Reset error tracking
         self.sample_errors = []
 
+        # Create RAGAS RunConfig from settings
+        run_cfg = RunConfig(
+            max_workers=self.config.run_config.get('max_workers', 2),
+            max_wait=self.config.run_config.get('max_wait', 180),
+            max_retries=self.config.run_config.get('max_retries', 3),
+            timeout=self.config.run_config.get('timeout', 60)
+        )
+
         # Run evaluation
         try:
             results = evaluate(
                 dataset=dataset,
                 metrics=metric_instances,
                 llm=self.evaluator_llm,
-                embeddings=self.evaluator_embeddings
+                embeddings=self.evaluator_embeddings,
+                run_config=run_cfg
             )
+
+            # Extract results using robust helper
+            scores, df = self._extract_results(results)
 
             if verbose:
                 print(f"✅ Evaluation complete!\n")
                 print(f"{'='*60}")
                 print("RESULTS")
                 print(f"{'='*60}")
-                for metric_name, score in results.items():
-                    if metric_name != 'ragas_score':
-                        print(f"  {metric_name}: {score:.4f}")
+                for metric_name, score in scores.items():
+                    print(f"  {metric_name}: {score:.4f}")
                 print(f"{'='*60}\n")
 
             # Package results with metadata
             return {
-                'scores': dict(results),
-                'dataset': results.to_pandas(),
+                'scores': scores,
+                'dataset': df,
                 'metadata': self._get_version_metadata(),
                 'errors': self.sample_errors,
                 'config': self.config.to_dict()

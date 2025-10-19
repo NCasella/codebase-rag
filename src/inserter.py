@@ -26,8 +26,9 @@ _=load_dotenv(find_dotenv())
 # Convierte texto a vectores de alta dimensionalidad para búsqueda semántica
 embedding_function = SentenceTransformerEmbeddingFunction()
 
-# Cliente global de ChromaDB (base de datos vectorial)
-_chroma_client = chromadb.Client()
+# Cliente global de ChromaDB (base de datos vectorial persistente)
+# Usa PersistentClient para almacenar datos en disco y mantener colecciones entre ejecuciones
+_chroma_client = chromadb.PersistentClient(path="./chroma_db")
 
 
 class ChromaCollection():
