@@ -4,7 +4,7 @@
 
   "evaluator_llm": {
     "provider": "google",
-    "model": "gemini-1.5-flash",
+    "model": "gemini-2.0-flash-lite",
     "temperature": 0.0,
     "top_p": 1.0,
     "max_tokens": null,
@@ -28,5 +28,12 @@
   "require_reference": false,
   "warn_on_missing_fields": true,
   "stop_on_error": false,
-  "verbose": true
+  "verbose": true,
+
+  "run_config": {
+    "max_workers": 2,
+    "max_wait": 180,
+    "max_retries": 3,
+    "timeout": 60
+  }
 }
