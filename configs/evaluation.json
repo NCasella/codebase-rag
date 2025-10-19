@@ -1,0 +1,32 @@
+{
+  "name": "default_evaluation",
+  "description": "Default RAGAS evaluation configuration with isolated evaluator LLM",
+
+  "evaluator_llm": {
+    "provider": "google",
+    "model": "gemini-1.5-flash",
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "max_tokens": null,
+    "api_key_env": "GEMINI_API_KEY"
+  },
+
+  "evaluator_embeddings": {
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "device": "cpu",
+    "normalize_embeddings": true
+  },
+
+  "metrics": [
+    "faithfulness",
+    "answer_relevancy",
+    "context_precision",
+    "context_recall"
+  ],
+
+  "batch_size": 10,
+  "require_reference": false,
+  "warn_on_missing_fields": true,
+  "stop_on_error": false,
+  "verbose": true
+}
