@@ -1,0 +1,100 @@
+{
+  "samples": [
+    {
+      "question": "What does the _initialize_collection function do?",
+      "metadata": {
+        "category": "code_understanding",
+        "difficulty": "medium",
+        "topic": "collection_initialization",
+        "file": "src/inserter.py"
+      }
+    },
+    {
+      "question": "How does the rag() method combine retrieval and generation?",
+      "metadata": {
+        "category": "code_understanding",
+        "difficulty": "hard",
+        "topic": "rag_pipeline",
+        "file": "src/inserter.py"
+      }
+    },
+    {
+      "question": "What error handling is implemented in load_from_zipfile?",
+      "metadata": {
+        "category": "code_quality",
+        "difficulty": "medium",
+        "topic": "error_handling",
+        "file": "src/text_splitter.py"
+      }
+    },
+    {
+      "question": "How are file paths validated in the language detector?",
+      "metadata": {
+        "category": "validation",
+        "difficulty": "easy",
+        "topic": "input_validation",
+        "file": "src/utils/language_detector.py"
+      }
+    },
+    {
+      "question": "What design patterns are used in the LLM factory?",
+      "metadata": {
+        "category": "architecture",
+        "difficulty": "hard",
+        "topic": "design_patterns",
+        "file": "src/llm/factory.py"
+      }
+    },
+    {
+      "question": "How does the system handle different distance functions in ChromaDB?",
+      "metadata": {
+        "category": "configuration",
+        "difficulty": "medium",
+        "topic": "embeddings",
+        "file": "src/inserter.py"
+      }
+    },
+    {
+      "question": "What happens when parser_threshold is set to different values?",
+      "metadata": {
+        "category": "configuration",
+        "difficulty": "medium",
+        "topic": "text_splitting_parameters"
+      }
+    },
+    {
+      "question": "How does the config validation work in RAGConfig?",
+      "metadata": {
+        "category": "validation",
+        "difficulty": "medium",
+        "topic": "config_validation",
+        "file": "src/config_loader.py"
+      }
+    },
+    {
+      "question": "What metadata is stored with each code fragment?",
+      "metadata": {
+        "category": "data_model",
+        "difficulty": "easy",
+        "topic": "document_metadata"
+      }
+    },
+    {
+      "question": "How does the system auto-detect the LLM provider from environment variables?",
+      "metadata": {
+        "category": "configuration",
+        "difficulty": "medium",
+        "topic": "provider_detection",
+        "file": "src/llm/factory.py"
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Code-specific test queries without ground truth references (for metrics that don't require references)",
+    "num_samples": 10,
+    "with_references": 0,
+    "without_references": 10,
+    "created_for": "ragas_evaluation_no_reference",
+    "usage_notes": "These queries are designed for metrics like faithfulness and answer_relevancy that don't require ground truth references"
+  }
+}
