@@ -6,7 +6,6 @@ Funcionalidades:
 - Búsqueda semántica de documentos similares
 - Generación de respuestas contextuales con el LLM a elección
 """
-
 import os
 import chromadb
 from src.llm.factory import create_llm, Provider, GoogleModel, OpenAIModel
@@ -15,10 +14,12 @@ from dotenv import load_dotenv, find_dotenv
 from langchain_core.documents import Document
 from uuid import uuid4
 from typing import Optional
-
 from .prompt_loader import get_prompt_loader
 from .config_loader import RAGConfig, EmbeddingsConfig, get_default_config
-
+from .plotter import plot_relevant_docs
+import umap
+import numpy as np 
+from tqdm import tqdm
 # Cargar variables de entorno (.env)
 _=load_dotenv(find_dotenv())
 
@@ -84,7 +85,6 @@ class ChromaCollection():
             collection_name=collection_name,
             embeddings_config=self.config.embeddings
         )
-
         # Configurar provider y modelo desde config
         provider_str = self.config.model.provider.lower()
         model_name = self.config.model.name
@@ -243,7 +243,7 @@ class ChromaCollection():
                 "content": f"Question: {query}\n\nInformation:\n{information}"
             }
         ]
-
+        self.project_and_plot_relevant_docs(query=query, title=query, k_similar_results=results)
         # GENERATION: Llamar al LLM para generar respuesta
         if verbose:
             print(f"\n⏳ Paso 3/3: Generando respuesta con {self.llm_client.model}...")
@@ -279,6 +279,19 @@ class ChromaCollection():
 
         content = response.text
         return content
+
+    def project_and_plot_relevant_docs(self,query, title, k_similar_results):
+        embeddings=self.chroma_collection.get(include=['embeddings'])['embeddings']
+        umap_transform = umap.UMAP(random_state=0, transform_seed=0).fit(embeddings)
+
+        
+        query_embedding = embedding_function([query])[0]
+        retrieved_embeddings = k_similar_results['embeddings'][0]
+        projected_query_embedding = project_embeddings([query_embedding], umap_transform)
+        projected_retrieved_embeddings = project_embeddings(retrieved_embeddings, umap_transform)
+        projected_dataset_embeddings = project_embeddings(embeddings, umap_transform)
+        plot_relevant_docs(projected_dataset_embeddings, projected_query_embedding, projected_retrieved_embeddings, query, title)
+
 
 def _initialize_collection(
     collection_name: str,
@@ -325,3 +338,21 @@ def _initialize_collection(
         chroma_collection = _chroma_client.get_collection(name=collection_name)
 
     return chroma_collection
+def project_embeddings(embeddings, umap_transform):
+  """
+  Projects high-dimensional embeddings into a 2D space using UMAP.
+
+  Parameters:
+  embeddings (numpy.ndarray): A 2D array-like object containing the embeddings to be transformed,
+                              where each row represents an embedding vector.
+  umap_transform (umap.UMAP): A pre-trained UMAP model to perform the transformation.
+
+  Returns:
+  numpy.ndarray: A 2D array where each row is a 2D embedding resulting from the UMAP transformation.
+  """
+  umap_embeddings = np.empty((len(embeddings),2))   # Mappeamos desde la longitud de nuestros embeddings a 2D
+
+  for i, embedding in enumerate(tqdm(embeddings)):
+      umap_embeddings[i] = umap_transform.transform([embedding])
+
+  return umap_embeddings
