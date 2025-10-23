@@ -7,6 +7,8 @@ Permite indexar código desde ZIP o GitHub y hacer queries usando RAG.
 import argparse
 import sys
 import os
+from datetime import datetime
+from pathlib import Path
 from src.inserter import ChromaCollection
 from src.text_splitter import load_from_zipfile, load_from_github_link
 from src.config_loader import RAGConfig
@@ -24,6 +26,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("-c", "--collection-name", default="codeRAG", help="Nombre de la colección")
     arg_parser.add_argument("--config", help="Ruta al archivo de configuración JSON (ej: configs/optimal.json)")
     arg_parser.add_argument("-v", "--verbose", action="store_true", help="Mostrar logs detallados del proceso RAG")
+    arg_parser.add_argument("--conversation-id", help="ID de conversación anterior para continuar el diálogo (de un archivo output/*.txt previo)")
 
     args = arg_parser.parse_args()
 
@@ -33,6 +36,7 @@ if __name__ == "__main__":
     user_prompt = args.prompt
     verbose = args.verbose
     config_path = args.config
+    conversation_id = args.conversation_id
 
     # Cargar configuración si se especifica
     config = None
@@ -103,8 +107,16 @@ if __name__ == "__main__":
 
     print(f"\n⏳ Generando embeddings y almacenando en ChromaDB...")
     print(f"   (Esto puede tardar unos segundos para {len(docs)} fragmentos)")
-    chroma.insert_docs(docs)
-    print(f"✅ {len(docs)} fragmentos indexados correctamente")
+    stats = chroma.insert_docs(docs)
+
+    # Mostrar estadísticas de inserción
+    if stats['duplicates'] > 0:
+        print(f"✅ Indexación completada:")
+        print(f"   • Total de fragmentos: {stats['total']}")
+        print(f"   • Duplicados omitidos: {stats['duplicates']}")
+        print(f"   • Nuevos insertados: {stats['inserted']}")
+    else:
+        print(f"✅ {stats['inserted']} fragmentos indexados correctamente")
 
     # ============================================================
     # FASE 3: CONSULTA RAG
@@ -126,8 +138,12 @@ if __name__ == "__main__":
         print(f"\n⏳ Paso 1/3: Buscando fragmentos relevantes...")
         print(f"   (Búsqueda semántica en {len(docs)} fragmentos)")
 
+    if conversation_id:
+        if verbose:
+            print(f"\n🔄 Continuando conversación: {conversation_id}")
+
     # Ejecutar RAG con logging mejorado
-    res = chroma.rag(query=user_prompt, verbose=verbose)
+    res, response_obj = chroma.rag(query=user_prompt, verbose=verbose, conversation_id=conversation_id)
 
     # ============================================================
     # RESULTADO FINAL
@@ -137,3 +153,24 @@ if __name__ == "__main__":
     print("="*60 + "\n")
     print(res)
     print("\n" + "="*60)
+
+    # ============================================================
+    # GUARDAR CONVERSATION ID PARA CONTINUACIÓN
+    # ============================================================
+    if response_obj and response_obj.conversation_id:
+        # Crear directorio output si no existe
+        output_dir = Path("output")
+        output_dir.mkdir(exist_ok=True)
+
+        # Generar nombre de archivo con timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = output_dir / f"{timestamp}.txt"
+
+        # Guardar conversation_id
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(response_obj.conversation_id)
+
+        print(f"\n💾 Conversation ID guardado en: {output_file}")
+        print(f"   Para continuar esta conversación, use: --conversation-id {response_obj.conversation_id}")
+    elif conversation_id:
+        print(f"\n⚠️  Nota: El proveedor actual no soporta continuación de conversación")

@@ -13,7 +13,7 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 from dotenv import load_dotenv, find_dotenv
 from langchain_core.documents import Document
 from uuid import uuid4
-from typing import Optional
+from typing import Optional, Any
 from .prompt_loader import get_prompt_loader
 from .config_loader import RAGConfig, EmbeddingsConfig, get_default_config
 from .plotter import plot_relevant_docs
@@ -156,32 +156,97 @@ class ChromaCollection():
         retrieved_documents = results['documents'][0]
         return retrieved_documents, results
     
-    def insert_docs(self, docs: list[Document]) -> None:
+    def _check_for_duplicates(self, docs: list[Document]) -> tuple[list[Document], int]:
+        """
+        Filtra documentos con contenido duplicado exacto ya existente en la colección.
+
+        Args:
+            docs: Lista de documentos a verificar
+
+        Returns:
+            Tupla de (documentos_únicos, número_de_duplicados)
+
+        Note:
+            Compara contenido exacto (page_content) para detectar duplicados.
+            Para colecciones grandes, esto puede ser lento. Considera optimizaciones si es necesario.
+        """
+        # Obtener todos los documentos existentes en la colección
+        try:
+            existing = self.chroma_collection.get(include=['documents'])
+            existing_contents = set(existing['documents']) if existing['documents'] else set()
+        except Exception:
+            # Si la colección está vacía o hay error, asumir que no hay duplicados
+            existing_contents = set()
+
+        # Filtrar documentos que no están duplicados
+        unique_docs = []
+        num_duplicates = 0
+
+        for doc in docs:
+            if doc.page_content not in existing_contents:
+                unique_docs.append(doc)
+            else:
+                num_duplicates += 1
+
+        return unique_docs, num_duplicates
+
+    def insert_docs(self, docs: list[Document], skip_duplicates: bool = True) -> dict:
         """
         Inserta documentos en ChromaDB con embeddings automáticos.
 
         Args:
             docs: Lista de Documents con page_content y metadata
+            skip_duplicates: Si True, detecta y omite duplicados exactos (default: True)
+
+        Returns:
+            Diccionario con estadísticas de inserción:
+            - total: número total de documentos recibidos
+            - duplicates: número de duplicados encontrados (si skip_duplicates=True)
+            - inserted: número de documentos insertados
 
         Example:
             >>> docs = [Document(page_content="def suma(a, b): return a + b",
             ...                  metadata={"file": "utils.py"})]
-            >>> collection.insert_docs(docs)
+            >>> stats = collection.insert_docs(docs)
+            >>> print(f"Insertados: {stats['inserted']}, Duplicados: {stats['duplicates']}")
 
         Note: Genera IDs con UUID4. Si la lista está vacía, no hace nada.
         """
         docs_list = list(docs or [])
-        if len(docs_list) == 0:
-            print("docs vacio")
-            return
+        original_count = len(docs_list)
 
+        if original_count == 0:
+            print("docs vacio")
+            return {"total": 0, "duplicates": 0, "inserted": 0}
+
+        # Detectar y filtrar duplicados si está habilitado
+        num_duplicates = 0
+        if skip_duplicates:
+            docs_list, num_duplicates = self._check_for_duplicates(docs_list)
+
+            if num_duplicates > 0:
+                print(f"⚠️  Encontrados {num_duplicates} duplicados (omitidos)")
+
+        # Si no quedan documentos después del filtrado, retornar
+        if len(docs_list) == 0:
+            print("✓ Todos los documentos ya existen en la colección")
+            return {"total": original_count, "duplicates": num_duplicates, "inserted": 0}
+
+        # Insertar documentos únicos
+        print(f"📝 Insertando {len(docs_list)} documentos nuevos...")
         self.chroma_collection.add(
-            ids=[str(uuid4()) for _ in docs],
-            documents=[doc.page_content for doc in docs],
-            metadatas=[doc.metadata for doc in docs]
+            ids=[str(uuid4()) for _ in docs_list],
+            documents=[doc.page_content for doc in docs_list],
+            metadatas=[doc.metadata for doc in docs_list]
         )
+
+        return {
+            "total": original_count,
+            "duplicates": num_duplicates,
+            "inserted": len(docs_list)
+        }
     
-    def rag(self, query: str, model: Optional[str] = None, verbose: bool = False) -> str:
+    def rag(self, query: str, model: Optional[str] = None, verbose: bool = False, conversation_id: Optional[str] = None) -> tuple[str, Any]:
         """
         Responde preguntas sobre el código usando RAG (Retrieval-Augmented Generation).
 
@@ -191,9 +256,11 @@ class ChromaCollection():
             query: Pregunta sobre el código (ej: "¿Cómo funciona la autenticación?")
             model: Modelo de LLM (opcional, usa el de config si no se especifica)
             verbose: Si es True, muestra logs detallados del proceso
+            conversation_id: ID de conversación anterior para continuar el diálogo (opcional)
 
         Returns:
-            Respuesta generada con contexto del código
+            Tupla de (respuesta_texto, response_object) donde response_object es el LLMResponse
+            completo con el conversation_id para futuras continuaciones
 
         Note: Usa parámetros de self.config para k_documents, temperature, etc.
         """
@@ -262,6 +329,7 @@ class ChromaCollection():
             messages=messages,
             temperature=self.config.model.temperature,
             top_p=self.config.model.top_p,
+            conversation_id=conversation_id,
         )
         # response = self.openai_client.chat.completions.create(**openai_params)
 
@@ -272,9 +340,11 @@ class ChromaCollection():
                 completion_tok = response.usage.get('completion_tokens', 'N/A')
                 total_tok = response.usage.get('total_tokens', 'N/A')
                 print(f"   • Tokens usados: {total_tok} total ({prompt_tok} prompt + {completion_tok} completion)")
+            if response.conversation_id:
+                print(f"   • Conversation ID: {response.conversation_id}")
         sources = [mdata["source"] for mdata in results["metadatas"][0]]
         content = response.text
-        return content + f"\n Archivos referenciados: {sources}"
+        return content + f"\n Archivos referenciados: {sources}", response
 
     def project_and_plot_relevant_docs(self,query, title, k_similar_results):
         embeddings=self.chroma_collection.get(include=['embeddings'])['embeddings']
