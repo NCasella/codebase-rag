@@ -98,6 +98,7 @@ class GoogleProvider(BaseLLMProvider):
         messages: list[dict[str, str]] | str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        conversation_id: str | None = None,
         **kwargs
     ) -> LLMResponse:
         """
@@ -107,14 +108,23 @@ class GoogleProvider(BaseLLMProvider):
             messages: Prompt string or OpenAI-style messages
             temperature: Sampling temperature (0.0-1.0)
             max_tokens: Maximum output tokens (None for default)
+            conversation_id: Not supported yet for Gemini
             **kwargs: Additional Gemini parameters
 
         Returns:
             LLMResponse with generated text
 
         Raises:
+            NotImplementedError: If conversation_id is provided
             Exception: Gemini API errors
         """
+        # Check if conversation continuation is requested
+        if conversation_id is not None:
+            raise NotImplementedError(
+                "Conversation continuation (conversation_id) is not yet supported "
+                "for Google Gemini provider. This feature is coming soon."
+            )
+
         # Format messages for Gemini
         prompt = self._format_messages(messages)
 

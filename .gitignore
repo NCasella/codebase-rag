@@ -222,6 +222,7 @@ Pipfile
 Pipfile.lock
 
 # ChromaDB
+chroma_db/
 chroma_data/
 *.db
 *.sqlite
@@ -231,6 +232,8 @@ test_data/
 test_codebase.zip
 *.zip
 test_rag.py
+results/
+output/
 
 # Temporary files
 temp/
@@ -238,3 +241,5 @@ tmp/
 
 # Venv folders
 Scripts/
+
+*.html

@@ -10,14 +10,14 @@
 
   "model": {
     "provider": "openai",
-    "name": "gpt-4o",
+    "name": "gpt-4.1-nano",
     "temperature": 0.2,
     "max_tokens": 2000,
     "top_p": 0.95
   },
 
   "retrieval": {
-    "k_documents": 7,
+    "k_documents": 30,
     "include_metadata": true,
     "similarity_threshold": null
   },
@@ -27,7 +27,7 @@
   },
 
   "embeddings": {
-    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "model_name": "microsoft/codebert-base",
     "device": "cpu",
     "normalize_embeddings": true,
     "distance_function":"cosine"

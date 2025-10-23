@@ -13,7 +13,7 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 from dotenv import load_dotenv, find_dotenv
 from langchain_core.documents import Document
 from uuid import uuid4
-from typing import Optional
+from typing import Optional, Any
 from .prompt_loader import get_prompt_loader
 from .config_loader import RAGConfig, EmbeddingsConfig, get_default_config
 from .plotter import plot_relevant_docs
@@ -28,8 +28,9 @@ _=load_dotenv(find_dotenv())
 # Convierte texto a vectores de alta dimensionalidad para búsqueda semántica
 embedding_function = SentenceTransformerEmbeddingFunction()
 
-# Cliente global de ChromaDB (base de datos vectorial)
-_chroma_client = chromadb.Client()
+# Cliente global de ChromaDB (base de datos vectorial persistente)
+# Usa PersistentClient para almacenar datos en disco y mantener colecciones entre ejecuciones
+_chroma_client = chromadb.PersistentClient(path="./chroma_db")
 
 
 class ChromaCollection():
@@ -162,32 +163,97 @@ class ChromaCollection():
         retrieved_documents = results['documents'][0]
         return retrieved_documents, results
     
-    def insert_docs(self, docs: list[Document]) -> None:
+    def _check_for_duplicates(self, docs: list[Document]) -> tuple[list[Document], int]:
+        """
+        Filtra documentos con contenido duplicado exacto ya existente en la colección.
+
+        Args:
+            docs: Lista de documentos a verificar
+
+        Returns:
+            Tupla de (documentos_únicos, número_de_duplicados)
+
+        Note:
+            Compara contenido exacto (page_content) para detectar duplicados.
+            Para colecciones grandes, esto puede ser lento. Considera optimizaciones si es necesario.
+        """
+        # Obtener todos los documentos existentes en la colección
+        try:
+            existing = self.chroma_collection.get(include=['documents'])
+            existing_contents = set(existing['documents']) if existing['documents'] else set()
+        except Exception:
+            # Si la colección está vacía o hay error, asumir que no hay duplicados
+            existing_contents = set()
+
+        # Filtrar documentos que no están duplicados
+        unique_docs = []
+        num_duplicates = 0
+
+        for doc in docs:
+            if doc.page_content not in existing_contents:
+                unique_docs.append(doc)
+            else:
+                num_duplicates += 1
+
+        return unique_docs, num_duplicates
+
+    def insert_docs(self, docs: list[Document], skip_duplicates: bool = True) -> dict:
         """
         Inserta documentos en ChromaDB con embeddings automáticos.
 
         Args:
             docs: Lista de Documents con page_content y metadata
+            skip_duplicates: Si True, detecta y omite duplicados exactos (default: True)
+
+        Returns:
+            Diccionario con estadísticas de inserción:
+            - total: número total de documentos recibidos
+            - duplicates: número de duplicados encontrados (si skip_duplicates=True)
+            - inserted: número de documentos insertados
 
         Example:
             >>> docs = [Document(page_content="def suma(a, b): return a + b",
             ...                  metadata={"file": "utils.py"})]
-            >>> collection.insert_docs(docs)
+            >>> stats = collection.insert_docs(docs)
+            >>> print(f"Insertados: {stats['inserted']}, Duplicados: {stats['duplicates']}")
 
         Note: Genera IDs con UUID4. Si la lista está vacía, no hace nada.
         """
         docs_list = list(docs or [])
-        if len(docs_list) == 0:
-            print("docs vacio")
-            return
+        original_count = len(docs_list)
 
+        if original_count == 0:
+            print("docs vacio")
+            return {"total": 0, "duplicates": 0, "inserted": 0}
+
+        # Detectar y filtrar duplicados si está habilitado
+        num_duplicates = 0
+        if skip_duplicates:
+            docs_list, num_duplicates = self._check_for_duplicates(docs_list)
+
+            if num_duplicates > 0:
+                print(f"⚠️  Encontrados {num_duplicates} duplicados (omitidos)")
+
+        # Si no quedan documentos después del filtrado, retornar
+        if len(docs_list) == 0:
+            print("✓ Todos los documentos ya existen en la colección")
+            return {"total": original_count, "duplicates": num_duplicates, "inserted": 0}
+
+        # Insertar documentos únicos
+        print(f"📝 Insertando {len(docs_list)} documentos nuevos...")
         self.chroma_collection.add(
-            ids=[str(uuid4()) for _ in docs],
-            documents=[doc.page_content for doc in docs],
-            metadatas=[doc.metadata for doc in docs]
+            ids=[str(uuid4()) for _ in docs_list],
+            documents=[doc.page_content for doc in docs_list],
+            metadatas=[doc.metadata for doc in docs_list]
         )
+
+        return {
+            "total": original_count,
+            "duplicates": num_duplicates,
+            "inserted": len(docs_list)
+        }
     
-    def rag(self, query: str, model: Optional[str] = None, verbose: bool = False) -> str:
+    def rag(self, query: str, model: Optional[str] = None, verbose: bool = False, conversation_id: Optional[str] = None) -> tuple[str, Any]:
         """
         Responde preguntas sobre el código usando RAG (Retrieval-Augmented Generation).
 
@@ -197,9 +263,11 @@ class ChromaCollection():
             query: Pregunta sobre el código (ej: "¿Cómo funciona la autenticación?")
             model: Modelo de LLM (opcional, usa el de config si no se especifica)
             verbose: Si es True, muestra logs detallados del proceso
+            conversation_id: ID de conversación anterior para continuar el diálogo (opcional)
 
         Returns:
-            Respuesta generada con contexto del código
+            Tupla de (respuesta_texto, response_object) donde response_object es el LLMResponse
+            completo con el conversation_id para futuras continuaciones
 
         Note: Usa parámetros de self.config para k_documents, temperature, etc.
         """
@@ -253,10 +321,9 @@ class ChromaCollection():
                 preview = doc[:100].replace('\n', ' ') + "..." if len(doc) > 100 else doc.replace('\n', ' ')
                 print(f"   {i}. {preview}")
 
-        # AUGMENTATION: Unir documentos en un solo contexto
+
         information = "\n".join(documents)
 
-        # Limitar contexto según max_context_length de config
         max_length = self.config.prompt.max_context_length
         if len(information) > max_length:
             information = information[:max_length]
@@ -268,10 +335,10 @@ class ChromaCollection():
             print(f"   • Longitud del contexto: {len(information)} caracteres")
             print(f"   • Fragmentos incluidos: {len(documents)}")
 
-        # Cargar prompt desde archivo
         system_prompt = self.prompt_loader.load(self.prompt_template)
 
-        # Construir prompt con system + user message
+        llm_info=[{"document":doc, **meta} for doc,meta in zip(documents,results["metadatas"][0])]
+
         # TODO sanitize! UNICODE 
         messages = [
             {
@@ -280,17 +347,16 @@ class ChromaCollection():
             },
             {
                 "role": "user",
-                "content": f"Question: {query}\n\nInformation:\n{information}"
+                "content": f"Question: {query} \n\nInformation:\n{llm_info}"
             }
         ]
         self.project_and_plot_relevant_docs(query=query, title=query, k_similar_results=results)
-        # GENERATION: Llamar al LLM para generar respuesta
+
         if verbose:
             print(f"\n⏳ Paso 3/3: Generando respuesta con {self.llm_client.model}...")
             print(f"   • Temperature: {self.config.model.temperature}")
             print(f"   • Tokens aproximados en contexto: ~{len(information) // 4}")
 
-        # Construir parámetros del LLM desde config
         llm_params = {
             # "model": model_name,
             "messages": messages,
@@ -306,6 +372,7 @@ class ChromaCollection():
             messages=messages,
             temperature=self.config.model.temperature,
             top_p=self.config.model.top_p,
+            conversation_id=conversation_id,
         )
         # response = self.openai_client.chat.completions.create(**openai_params)
 
@@ -316,22 +383,145 @@ class ChromaCollection():
                 completion_tok = response.usage.get('completion_tokens', 'N/A')
                 total_tok = response.usage.get('total_tokens', 'N/A')
                 print(f"   • Tokens usados: {total_tok} total ({prompt_tok} prompt + {completion_tok} completion)")
-
+            if response.conversation_id:
+                print(f"   • Conversation ID: {response.conversation_id}")
+        sources = [mdata["source"] for mdata in results["metadatas"][0]]
         content = response.text
-        return content
+        return content + f"\n Archivos referenciados: {sources}", response
 
     def project_and_plot_relevant_docs(self,query, title, k_similar_results):
         embeddings=self.chroma_collection.get(include=['embeddings'])['embeddings']
         umap_transform = umap.UMAP(random_state=0, transform_seed=0).fit(embeddings)
 
-        
-        query_embedding = embedding_function([query])[0]
+
+        # Use the collection's embedding function for consistency
+        query_embedding = self.chroma_collection._embedding_function([query])[0]
         retrieved_embeddings = k_similar_results['embeddings'][0]
         projected_query_embedding = project_embeddings([query_embedding], umap_transform)
         projected_retrieved_embeddings = project_embeddings(retrieved_embeddings, umap_transform)
         projected_dataset_embeddings = project_embeddings(embeddings, umap_transform)
         plot_relevant_docs(projected_dataset_embeddings, projected_query_embedding, projected_retrieved_embeddings, query, title)
 
+
+    def collect_evaluation_data(
+        self,
+        queries: list[str],
+        references: Optional[list[str]] = None,
+        verbose: bool = False
+    ) -> list[dict]:
+        """
+        Collect evaluation data by running queries through RAG pipeline.
+
+        This method is designed for RAGAS evaluation. It runs each query through
+        the RAG system and collects:
+        - user_input (query)
+        - response (generated answer)
+        - retrieved_contexts (relevant code snippets)
+        - reference (ground truth, if provided)
+
+        Args:
+            queries: List of test queries
+            references: Optional list of ground truth answers
+            verbose: Print progress information
+
+        Returns:
+            List of evaluation samples, each containing:
+            {
+                "user_input": str,
+                "response": str,
+                "retrieved_contexts": list[str],
+                "reference": str (optional)
+            }
+
+        Example:
+            >>> collection = ChromaCollection('my_code')
+            >>> queries = ["How does auth work?", "What is the API structure?"]
+            >>> eval_data = collection.collect_evaluation_data(queries, verbose=True)
+            >>> # Use eval_data with RAGASEvaluator
+        """
+        if references and len(references) != len(queries):
+            raise ValueError(
+                f"Length mismatch: {len(queries)} queries but {len(references)} references"
+            )
+
+        if verbose:
+            print(f"\n⏳ Collecting evaluation data for {len(queries)} queries...")
+
+        evaluation_samples = []
+        failed_queries = []
+
+        for i, query in enumerate(queries, 1):
+            if verbose:
+                print(f"  [{i}/{len(queries)}] Processing: {query[:60]}...")
+
+            try:
+                # Get k documents (use config if available)
+                k = self.config.retrieval.k_documents
+
+                # Retrieve contexts
+                retrieved_docs, results = self.retrieve_k_similar_docs(query, k=k)
+
+                # Validate contexts
+                if not retrieved_docs or all(not doc for doc in retrieved_docs):
+                    if verbose:
+                        print(f"    ⚠️  Warning: No contexts retrieved")
+                    failed_queries.append({
+                        "query": query,
+                        "reason": "No contexts retrieved"
+                    })
+                    continue
+
+                # Generate response
+                response, response_obj = self.rag(query, verbose=False)
+
+                # Validate response
+                if not response or not response.strip():
+                    if verbose:
+                        print(f"    ⚠️  Warning: Empty response generated")
+                    failed_queries.append({
+                        "query": query,
+                        "reason": "Empty response"
+                    })
+                    continue
+
+                # Build evaluation sample
+                sample = {
+                    "user_input": query,
+                    "response": response,
+                    "retrieved_contexts": retrieved_docs
+                }
+
+                # Add reference if provided
+                if references:
+                    sample["reference"] = references[i - 1]
+
+                evaluation_samples.append(sample)
+
+                if verbose:
+                    print(f"    ✅ Success ({len(retrieved_docs)} contexts, {len(response)} chars response)")
+
+            except Exception as e:
+                error_msg = f"Error processing query: {str(e)}"
+                if verbose:
+                    print(f"    ❌ {error_msg}")
+
+                failed_queries.append({
+                    "query": query,
+                    "reason": error_msg,
+                    "exception": str(type(e).__name__)
+                })
+                continue
+
+        if verbose:
+            print(f"\n✅ Collected {len(evaluation_samples)}/{len(queries)} samples")
+            if failed_queries:
+                print(f"⚠️  {len(failed_queries)} queries failed:")
+                for failed in failed_queries[:5]:  # Show first 5
+                    print(f"   • {failed['query'][:50]}... - {failed['reason']}")
+                if len(failed_queries) > 5:
+                    print(f"   ... and {len(failed_queries) - 5} more")
+
+        return evaluation_samples
 
 def _initialize_collection(
     collection_name: str,

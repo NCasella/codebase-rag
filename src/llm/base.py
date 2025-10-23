@@ -20,11 +20,13 @@ class LLMResponse:
         model: Model identifier used for generation
         usage: Token usage statistics (provider-specific format)
         raw_response: Original provider response for debugging
+        conversation_id: Unique identifier for continuing multi-turn conversations (provider-specific)
     """
     text: str
     model: str
     usage: dict[str, Any] | None = None
     raw_response: Any = None
+    conversation_id: str | None = None
 
 
 class BaseLLMProvider(ABC):
@@ -69,6 +71,7 @@ class BaseLLMProvider(ABC):
         messages: list[dict[str, str]] | str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        conversation_id: str | None = None,
         **kwargs
     ) -> LLMResponse:
         """
@@ -79,6 +82,7 @@ class BaseLLMProvider(ABC):
                      [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
             temperature: Sampling temperature (0.0 to 1.0)
             max_tokens: Maximum tokens to generate (None = provider default)
+            conversation_id: Optional conversation ID to continue a previous conversation
             **kwargs: Provider-specific additional parameters
 
         Returns:
@@ -105,6 +109,48 @@ class BaseLLMProvider(ABC):
         if isinstance(messages, str):
             return messages
         return messages
+
+    def continue_conversation(
+        self,
+        previous_response: LLMResponse,
+        new_message: str,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        **kwargs
+    ) -> LLMResponse:
+        """
+        Continue a conversation from a previous response.
+
+        This is a convenience method that extracts the conversation_id from
+        a previous response and uses it to continue the conversation.
+
+        Args:
+            previous_response: The LLMResponse from the previous turn
+            new_message: The new user message to send
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_tokens: Maximum tokens to generate (None = provider default)
+            **kwargs: Provider-specific additional parameters
+
+        Returns:
+            LLMResponse with generated text and updated conversation_id
+
+        Raises:
+            NotImplementedError: If the provider doesn't support conversations
+            Exception: Provider-specific API errors
+
+        Example:
+            >>> response1 = provider.generate("I have 2 dogs")
+            >>> response2 = provider.continue_conversation(response1, "How many paws?")
+        """
+        conversation_id = previous_response.conversation_id
+
+        return self.generate(
+            messages=new_message,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            conversation_id=conversation_id,
+            **kwargs
+        )
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(model='{self.model}')"

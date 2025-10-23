@@ -77,30 +77,39 @@ class OpenAIProvider(BaseLLMProvider):
         messages: list[dict[str, str]] | str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        conversation_id: str | None = None,
         **kwargs
     ) -> LLMResponse:
         """
-        Generate text using OpenAI GPT.
+        Generate text using OpenAI Responses API.
+
+        Uses the OpenAI Responses API which provides native support for
+        multi-turn conversations via previous_response_id.
 
         Args:
             messages: Prompt string or OpenAI-style messages
             temperature: Sampling temperature (0.0-2.0)
             max_tokens: Maximum output tokens (None for default)
-            **kwargs: Additional OpenAI parameters (top_p, frequency_penalty, etc.)
+            conversation_id: Previous response ID to continue a conversation
+            **kwargs: Additional OpenAI parameters (top_p, store, include, etc.)
 
         Returns:
-            LLMResponse with generated text
+            LLMResponse with generated text and conversation_id for continuation
 
         Raises:
             Exception: OpenAI API errors
+
+        Note:
+            This implementation uses the Responses API (client.responses.create)
+            instead of Chat Completions API for better conversation support.
         """
         # Format messages for OpenAI
         formatted_messages = self._format_messages(messages)
 
-        # Build API parameters
+        # Build API parameters for Responses API
         api_params = {
             "model": self.model,
-            "messages": formatted_messages,
+            "input": formatted_messages,
         }
 
         # Only add temperature if model supports it
@@ -110,22 +119,30 @@ class OpenAIProvider(BaseLLMProvider):
         if max_tokens:
             api_params["max_tokens"] = max_tokens
 
+        # Add previous_response_id for conversation continuity
+        if conversation_id:
+            api_params["previous_response_id"] = conversation_id
+
         # Merge with additional kwargs
         api_params.update(kwargs)
 
-        # Generate completion
+        # Generate response using Responses API
         try:
-            response = self.client.chat.completions.create(**api_params)
+            response = self.client.responses.create(**api_params)
 
-            # Extract text from response
-            generated_text = response.choices[0].message.content
+            # Extract text from response using helper method
+            generated_text = response.output_text
+
+            # Extract response ID for conversation continuity
+            response_id = getattr(response, "id", None)
 
             # Build LLMResponse
             return LLMResponse(
                 text=generated_text,
                 model=self.model,
                 usage=self._extract_usage(response),
-                raw_response=response
+                raw_response=response,
+                conversation_id=response_id
             )
 
         except Exception as e:

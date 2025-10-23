@@ -533,17 +533,266 @@ Ver [requirements.txt](requirements.txt) para la lista completa.
 - El rendimiento depende del tamaño de la codebase y el tamaño de fragmento elegido
 - La calidad de las respuestas depende de la relevancia de los fragmentos recuperados
 
+## Evaluación con RAGAS
+
+El sistema incluye un módulo completo de evaluación basado en [RAGAS](https://docs.ragas.io/) (Retrieval-Augmented Generation Assessment) para medir la calidad del sistema RAG.
+
+### Métricas Disponibles
+
+El sistema soporta las siguientes métricas de RAGAS:
+
+- **Faithfulness**: Evalúa si la respuesta generada se basa fielmente en el contexto recuperado (sin alucinaciones)
+- **Answer Relevancy**: Mide qué tan relevante es la respuesta para la pregunta del usuario
+- **Context Precision**: Evalúa si el contexto recuperado es preciso y relevante
+- **Context Recall**: Mide qué tan completo es el contexto recuperado comparado con la respuesta ideal
+
+### Métricas que Requieren Ground Truth (Referencias)
+
+**IMPORTANTE**: Algunas métricas requieren respuestas de referencia (ground truth):
+- `context_precision` ✓ requiere referencias
+- `context_recall` ✓ requiere referencias
+- `faithfulness` ✗ NO requiere referencias
+- `answer_relevancy` ✗ NO requiere referencias
+
+### Evaluación Rápida
+
+Evaluar tu sistema RAG en 3 pasos:
+
+```bash
+# 1. Preparar dataset de prueba (ver data/evaluation/test_queries.json)
+# 2. Ejecutar evaluación
+python evaluate.py \
+  --collection-name codeRAG \
+  --test-dataset data/evaluation/test_queries.json \
+  --metrics faithfulness,answer_relevancy
+
+# 3. Ver resultados en results/evaluation_results.csv
+```
+
+### Uso Completo del Script de Evaluación
+
+**Evaluar con dataset existente:**
+```bash
+python evaluate.py \
+  --collection-name codeRAG \
+  --test-dataset data/evaluation/test_queries.json \
+  --eval-config configs/evaluation.json \
+  --output results/eval_2025_01_18.csv \
+  --verbose
+```
+
+**Auto-generar queries de prueba:**
+```bash
+python evaluate.py \
+  --collection-name codeRAG \
+  --auto-generate 20 \
+  --metrics faithfulness,answer_relevancy \
+  --save-dataset data/evaluation/my_test_queries.json
+```
+
+**Generar referencias automáticamente:**
+```bash
+python evaluate.py \
+  --collection-name codeRAG \
+  --test-dataset data/evaluation/code_specific_queries.json \
+  --generate-references \
+  --save-dataset data/evaluation/queries_with_refs.json
+```
+
+⚠️ **Nota**: Las referencias auto-generadas deben ser revisadas manualmente para garantizar calidad.
+
+**Curacióninteractiva de referencias:**
+```bash
+python evaluate.py \
+  --collection-name codeRAG \
+  --test-dataset data/evaluation/test_queries.json \
+  --interactive-curation
+```
+
+### Uso Programático
+
+```python
+from src.evaluation import RAGASEvaluator, EvaluationConfig, TestDatasetGenerator
+from src.inserter import ChromaCollection
+
+# 1. Cargar configuración de evaluación
+eval_config = EvaluationConfig.from_json("configs/evaluation.json")
+
+# 2. Inicializar evaluador (LLM aislado del sistema de generación)
+evaluator = RAGASEvaluator(eval_config)
+
+# 3. Preparar queries de prueba
+generator = TestDatasetGenerator()
+test_queries = generator.load_from_json("data/evaluation/test_queries.json")
+
+# 4. Recolectar datos de evaluación
+collection = ChromaCollection("codeRAG")
+queries = [q.question for q in test_queries]
+references = [q.reference for q in test_queries]
+
+eval_data = collection.collect_evaluation_data(
+    queries=queries,
+    references=references,
+    verbose=True
+)
+
+# 5. Ejecutar evaluación
+from ragas import EvaluationDataset
+dataset = EvaluationDataset.from_list(eval_data)
+
+results = evaluator.evaluate(
+    dataset=dataset,
+    metrics=["faithfulness", "answer_relevancy"],
+    verbose=True
+)
+
+# 6. Exportar resultados con versionado
+evaluator.export_results(
+    results=results,
+    output_path="results/my_evaluation.csv",
+    format="csv"
+)
+```
+
+### Estructura de un Dataset de Evaluación
+
+**Formato JSON:**
+```json
+{
+  "samples": [
+    {
+      "question": "¿Cómo funciona la autenticación?",
+      "reference": "La autenticación se maneja mediante...",
+      "metadata": {
+        "category": "security",
+        "difficulty": "medium"
+      }
+    }
+  ]
+}
+```
+
+**Campos:**
+- `question` (requerido): La pregunta a evaluar
+- `reference` (opcional): Respuesta de referencia (ground truth)
+- `metadata` (opcional): Metadata adicional para análisis
+
+### Configuración de Evaluación
+
+El archivo `configs/evaluation.json` permite configurar:
+
+```json
+{
+  "evaluator_llm": {
+    "provider": "google",
+    "model": "gemini-1.5-flash",
+    "temperature": 0.0
+  },
+  "metrics": ["faithfulness", "answer_relevancy"],
+  "batch_size": 10,
+  "warn_on_missing_fields": true
+}
+```
+
+**Parámetros clave:**
+- `evaluator_llm`: Modelo LLM **aislado** para evaluación (diferente del modelo de generación)
+- `metrics`: Métricas a calcular
+- `warn_on_missing_fields`: Advertir sobre campos faltantes según requerimientos de métricas
+
+### Interpretando Resultados
+
+**Rangos de puntuación (0.0 - 1.0):**
+- **0.8 - 1.0**: Excelente - El sistema está funcionando muy bien
+- **0.6 - 0.8**: Bueno - Rendimiento aceptable, posibles mejoras
+- **0.4 - 0.6**: Regular - Necesita optimización
+- **< 0.4**: Pobre - Requiere cambios significativos
+
+**Métricas específicas para código:**
+- **Faithfulness alto**: Respuestas basadas en código real (sin inventar funciones)
+- **Answer Relevancy alto**: Respuestas centradas en la pregunta
+- **Context Precision alto**: Fragmentos de código recuperados son relevantes
+- **Context Recall alto**: Se recuperan todos los fragmentos necesarios
+
+### Generación de Referencias (Ground Truth)
+
+**Opción 1: Auto-generar con RAG**
+```python
+generator = TestDatasetGenerator()
+queries = generator.load_from_json("queries_without_refs.json")
+
+# Genera referencias candidatas
+queries_with_refs = generator.build_reference_answers(
+    queries=queries,
+    collection=collection,
+    verbose=True
+)
+
+# ⚠️ REVISAR MANUALMENTE las referencias generadas
+generator.save_to_json(queries_with_refs, "queries_for_review.json")
+```
+
+**Opción 2: Curación interactiva**
+```python
+generator.curate_references(
+    dataset_path="data/evaluation/test_queries.json",
+    resume=True  # Saltar queries que ya tienen referencia
+)
+```
+
+**Opción 3: Creación manual**
+Editar directamente el archivo JSON con tus respuestas ideales.
+
+### Versionado y Reproducibilidad
+
+Los resultados exportados incluyen metadata completa para reproducibilidad:
+- Versión de RAGAS, Python, y dependencias
+- Modelo de generación y evaluación usados
+- Modelo de embeddings
+- Timestamp de evaluación
+- Snapshot de configuración
+
+Ver archivo `.metadata.json` junto al CSV de resultados.
+
+### Buenas Prácticas
+
+1. **Datasets balanceados**: Incluir preguntas de diferentes niveles de dificultad y categorías
+2. **Referencias de calidad**: Para métricas que requieren ground truth, asegurar referencias precisas
+3. **Evaluación periódica**: Evaluar después de cambios en configuración, modelos, o codebase
+4. **Comparación de configs**: Usar evaluación para comparar diferentes configuraciones (optimal vs fast)
+5. **Análisis de errores**: Revisar muestras con puntuación baja para identificar problemas
+
+### Archivos de Evaluación
+
+```
+codebase-rag/
+├── configs/
+│   └── evaluation.json          # Config de evaluación
+├── data/
+│   └── evaluation/
+│       ├── test_queries.json            # Queries con referencias
+│       └── code_specific_queries.json   # Queries sin referencias
+├── results/                     # Resultados de evaluación
+│   ├── evaluation_results.csv
+│   └── evaluation_results.metadata.json
+├── src/
+│   └── evaluation/
+│       ├── ragas_evaluator.py           # Evaluador principal
+│       └── test_dataset_generator.py    # Generador de datasets
+├── tests/
+│   └── test_ragas_evaluator.py
+└── evaluate.py                  # Script CLI de evaluación
+```
+
 ## Mejoras Futuras
 
 - Soporte para modelos de embedding adicionales (opciones locales/open-source)
-
-
 - Interfaz web para consultas más fáciles
 - Soporte para actualizaciones incrementales de colecciones existentes
 - Filtrado avanzado y búsqueda por metadata
 - Evaluación de rendimiento entre repos con múltiples lenguajes vs un solo lenguaje
 - Análisis de code coverage y generación de tests
 - Soporte multi-modal para diagramas e imágenes de documentación
+- **Métricas personalizadas de código**: Validación de sintaxis, correctitud de APIs, alineación código-documentación
 
 
 
