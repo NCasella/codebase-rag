@@ -24,6 +24,7 @@ class GoogleModel(Model):
     See: https://ai.google.dev/gemini-api/docs/models
     """
     GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+    GEMINI_2_0_FLASH_LITE = "gemini-2.0-flash-lite"
 
 
 class OpenAIModel(Model):
@@ -38,6 +39,12 @@ class OpenAIModel(Model):
 MODEL_METADATA = {
     # Google Gemini
     GoogleModel.GEMINI_2_5_FLASH_LITE: {
+        "context_window": 1_048_576,
+        "output_limit": 65_536,
+        "tier": "production",
+        "supports_temperature": True
+    },
+    GoogleModel.GEMINI_2_0_FLASH_LITE: {
         "context_window": 1_048_576,
         "output_limit": 65_536,
         "tier": "production",

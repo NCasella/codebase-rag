@@ -27,8 +27,9 @@ _=load_dotenv(find_dotenv())
 # Convierte texto a vectores de alta dimensionalidad para búsqueda semántica
 embedding_function = SentenceTransformerEmbeddingFunction()
 
-# Cliente global de ChromaDB (base de datos vectorial)
-_chroma_client = chromadb.Client()
+# Cliente global de ChromaDB (base de datos vectorial persistente)
+# Usa PersistentClient para almacenar datos en disco y mantener colecciones entre ejecuciones
+_chroma_client = chromadb.PersistentClient(path="./chroma_db")
 
 
 class ChromaCollection():
@@ -287,6 +288,126 @@ class ChromaCollection():
         projected_dataset_embeddings = project_embeddings(embeddings, umap_transform)
         plot_relevant_docs(projected_dataset_embeddings, projected_query_embedding, projected_retrieved_embeddings, query, title)
 
+
+    def collect_evaluation_data(
+        self,
+        queries: list[str],
+        references: Optional[list[str]] = None,
+        verbose: bool = False
+    ) -> list[dict]:
+        """
+        Collect evaluation data by running queries through RAG pipeline.
+
+        This method is designed for RAGAS evaluation. It runs each query through
+        the RAG system and collects:
+        - user_input (query)
+        - response (generated answer)
+        - retrieved_contexts (relevant code snippets)
+        - reference (ground truth, if provided)
+
+        Args:
+            queries: List of test queries
+            references: Optional list of ground truth answers
+            verbose: Print progress information
+
+        Returns:
+            List of evaluation samples, each containing:
+            {
+                "user_input": str,
+                "response": str,
+                "retrieved_contexts": list[str],
+                "reference": str (optional)
+            }
+
+        Example:
+            >>> collection = ChromaCollection('my_code')
+            >>> queries = ["How does auth work?", "What is the API structure?"]
+            >>> eval_data = collection.collect_evaluation_data(queries, verbose=True)
+            >>> # Use eval_data with RAGASEvaluator
+        """
+        if references and len(references) != len(queries):
+            raise ValueError(
+                f"Length mismatch: {len(queries)} queries but {len(references)} references"
+            )
+
+        if verbose:
+            print(f"\n⏳ Collecting evaluation data for {len(queries)} queries...")
+
+        evaluation_samples = []
+        failed_queries = []
+
+        for i, query in enumerate(queries, 1):
+            if verbose:
+                print(f"  [{i}/{len(queries)}] Processing: {query[:60]}...")
+
+            try:
+                # Get k documents (use config if available)
+                k = self.config.retrieval.k_documents
+
+                # Retrieve contexts
+                retrieved_docs, results = self.retrieve_k_similar_docs(query, k=k)
+
+                # Validate contexts
+                if not retrieved_docs or all(not doc for doc in retrieved_docs):
+                    if verbose:
+                        print(f"    ⚠️  Warning: No contexts retrieved")
+                    failed_queries.append({
+                        "query": query,
+                        "reason": "No contexts retrieved"
+                    })
+                    continue
+
+                # Generate response
+                response = self.rag(query, verbose=False)
+
+                # Validate response
+                if not response or not response.strip():
+                    if verbose:
+                        print(f"    ⚠️  Warning: Empty response generated")
+                    failed_queries.append({
+                        "query": query,
+                        "reason": "Empty response"
+                    })
+                    continue
+
+                # Build evaluation sample
+                sample = {
+                    "user_input": query,
+                    "response": response,
+                    "retrieved_contexts": retrieved_docs
+                }
+
+                # Add reference if provided
+                if references:
+                    sample["reference"] = references[i - 1]
+
+                evaluation_samples.append(sample)
+
+                if verbose:
+                    print(f"    ✅ Success ({len(retrieved_docs)} contexts, {len(response)} chars response)")
+
+            except Exception as e:
+                error_msg = f"Error processing query: {str(e)}"
+                if verbose:
+                    print(f"    ❌ {error_msg}")
+
+                failed_queries.append({
+                    "query": query,
+                    "reason": error_msg,
+                    "exception": str(type(e).__name__)
+                })
+                continue
+
+        if verbose:
+            print(f"\n✅ Collected {len(evaluation_samples)}/{len(queries)} samples")
+            if failed_queries:
+                print(f"⚠️  {len(failed_queries)} queries failed:")
+                for failed in failed_queries[:5]:  # Show first 5
+                    print(f"   • {failed['query'][:50]}... - {failed['reason']}")
+                if len(failed_queries) > 5:
+                    print(f"   ... and {len(failed_queries) - 5} more")
+
+        return evaluation_samples
 
 def _initialize_collection(
     collection_name: str,
