@@ -229,6 +229,8 @@ class ChromaCollection():
 
         system_prompt = self.prompt_loader.load(self.prompt_template)
 
+        llm_info=[{"document":doc, **meta} for doc,meta in zip(documents,results["metadatas"][0])]
+
         # TODO sanitize! UNICODE 
         messages = [
             {
@@ -237,7 +239,7 @@ class ChromaCollection():
             },
             {
                 "role": "user",
-                "content": f"Question: {query} \n\nInformation:\n{information}"
+                "content": f"Question: {query} \n\nInformation:\n{llm_info}"
             }
         ]
         self.project_and_plot_relevant_docs(query=query, title=query, k_similar_results=results)
