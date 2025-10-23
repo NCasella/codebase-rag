@@ -17,8 +17,9 @@ from typing import Optional, Any
 from .prompt_loader import get_prompt_loader
 from .config_loader import RAGConfig, EmbeddingsConfig, get_default_config
 from .plotter import plot_relevant_docs
+from .reranker import RerankFactory
 import umap
-import numpy as np 
+import numpy as np
 from tqdm import tqdm
 # Cargar variables de entorno (.env)
 _=load_dotenv(find_dotenv())
@@ -137,6 +138,12 @@ class ChromaCollection():
             )
 
         self.prompt_template = self.config.prompt.template
+
+        # Inicializar reranker si está habilitado
+        if self.config.rerank.enabled:
+            self.reranker = RerankFactory.create_reranker(self.config.rerank)
+        else:
+            self.reranker = None
 
     def retrieve_k_similar_docs(self, query: str, k: int = 5) -> tuple[list[str], dict]:
         """
@@ -266,16 +273,50 @@ class ChromaCollection():
         """
         model_name = model if model is not None else self.config.model.name
 
-        k = self.config.retrieval.k_documents
-        documents, results = self.retrieve_k_similar_docs(query, k=k)
+        # RETRIEVAL: Recuperar documentos
+        # Si reranking está habilitado, recuperar más docs para luego reranquear
+        if self.reranker is not None and self.config.rerank.enabled:
+            k_retrieve = self.config.rerank.retrieve_k
+        else:
+            k_retrieve = self.config.retrieval.k_documents
+
+        documents, results = self.retrieve_k_similar_docs(query, k=k_retrieve)
+
+        if verbose:
+            print(f"✅ Encontrados {len(documents)} fragmentos relevantes (retrieval inicial)")
+
+        # RERANKING: Aplicar reranking si está habilitado
+        if self.reranker is not None and self.config.rerank.enabled:
+            if verbose:
+                print(f"\n🔄 Aplicando reranking con estrategia: {self.config.rerank.strategy}")
+
+            # Obtener embeddings para reranking (necesarios para MMR)
+            embeddings = results.get('embeddings', [None])[0] if 'embeddings' in results else None
+            metadata = results.get('metadatas', [None])[0] if 'metadatas' in results else None
+
+            # Aplicar reranking
+            reranked_docs, reranked_indices, reranked_scores = self.reranker.rerank(
+                query=query,
+                documents=documents,
+                embeddings=embeddings,
+                metadata=metadata,
+                top_n=self.config.rerank.top_n
+            )
+
+            documents = reranked_docs
+
+            if verbose:
+                print(f"✅ Reranking completado: {len(reranked_docs)} documentos seleccionados")
+                print(f"   • Scores: min={min(reranked_scores):.3f}, max={max(reranked_scores):.3f}")
+                print(f"   • Índices originales: {reranked_indices}")
+
         if self.config.retrieval.similarity_threshold is not None:
             # TODO: Implementar filtrado por similarity threshold
             # Requiere acceso a distances de ChromaDB
             pass
 
         if verbose:
-            print(f"✅ Encontrados {len(documents)} fragmentos relevantes")
-            print(f"\n📄 Fragmentos recuperados:")
+            print(f"\n📄 Fragmentos finales para generación ({len(documents)}):")
             for i, doc in enumerate(documents, 1):
                 preview = doc[:100].replace('\n', ' ') + "..." if len(doc) > 100 else doc.replace('\n', ' ')
                 print(f"   {i}. {preview}")
@@ -352,8 +393,9 @@ class ChromaCollection():
         embeddings=self.chroma_collection.get(include=['embeddings'])['embeddings']
         umap_transform = umap.UMAP(random_state=0, transform_seed=0).fit(embeddings)
 
-        
-        query_embedding = embedding_function([query])[0]
+
+        # Use the collection's embedding function for consistency
+        query_embedding = self.chroma_collection._embedding_function([query])[0]
         retrieved_embeddings = k_similar_results['embeddings'][0]
         projected_query_embedding = project_embeddings([query_embedding], umap_transform)
         projected_retrieved_embeddings = project_embeddings(retrieved_embeddings, umap_transform)
@@ -430,7 +472,7 @@ class ChromaCollection():
                     continue
 
                 # Generate response
-                response = self.rag(query, verbose=False)
+                response, response_obj = self.rag(query, verbose=False)
 
                 # Validate response
                 if not response or not response.strip():

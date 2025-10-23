@@ -226,7 +226,7 @@ class TestDatasetGenerator:
             # Generate reference using RAG
             # Use lower temperature for more deterministic responses
             try:
-                reference = collection.rag(
+                reference, _ = collection.rag(
                     query=query.question,
                     verbose=False
                 )

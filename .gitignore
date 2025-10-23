@@ -241,3 +241,5 @@ tmp/
 
 # Venv folders
 Scripts/
+
+*.html

@@ -31,5 +31,10 @@
     "device": "cpu",
     "normalize_embeddings": true,
     "distance_function":"cosine"
+  },
+
+  "rerank": {
+    "enabled": false,
+    "strategy": "none"
   }
 }
