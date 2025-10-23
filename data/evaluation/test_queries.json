@@ -1,0 +1,111 @@
+{
+  "samples": [
+    {
+      "question": "How does the RAG system work in this codebase?",
+      "reference": "The RAG system works through a four-phase pipeline: 1) Data Loading from ZIP/GitHub repositories, 2) Language-aware parsing using tree-sitter, 3) Indexing with ChromaDB and sentence-transformers embeddings, and 4) Query & Generation using semantic search (k=5 similar docs) combined with LLM-powered responses from Google Gemini or OpenAI.",
+      "metadata": {
+        "category": "architecture",
+        "difficulty": "medium",
+        "topic": "rag_pipeline"
+      }
+    },
+    {
+      "question": "What LLM providers are supported?",
+      "reference": "The system supports two LLM providers: Google Gemini (via google-genai) and OpenAI (via openai). The provider is selected through a factory pattern in src/llm/factory.py, with auto-detection from environment variables preferring Google if GEMINI_API_KEY exists, falling back to OPENAI_API_KEY.",
+      "metadata": {
+        "category": "configuration",
+        "difficulty": "easy",
+        "topic": "llm_providers"
+      }
+    },
+    {
+      "question": "How is code parsed and split into fragments?",
+      "reference": "Code is parsed using language-specific parsers from tree-sitter through the src/text_splitter.py module. The parse_file() function uses LangChain's LanguageParser with a configurable parser_threshold (default: 3) to control minimum chunk size. Each fragment retains metadata including source_file and detected language.",
+      "metadata": {
+        "category": "data_processing",
+        "difficulty": "medium",
+        "topic": "text_splitting"
+      }
+    },
+    {
+      "question": "What programming languages are supported?",
+      "reference": "The system supports 30+ languages including Python, JavaScript/TypeScript, Java, C/C++, Go, Rust, Ruby, PHP, C#, Swift, Kotlin, Scala, Haskell, Lua, and LaTeX for code, plus Markdown, JSON, YAML, TOML, XML, HTML, CSS, Shell scripts, and SQL for documentation and configuration files. Language detection is handled by src/utils/language_detector.py.",
+      "metadata": {
+        "category": "features",
+        "difficulty": "easy",
+        "topic": "language_support"
+      }
+    },
+    {
+      "question": "How are embeddings generated and stored?",
+      "reference": "Embeddings are generated using SentenceTransformer (default model: all-MiniLM-L6-v2) which converts code fragments to high-dimensional vectors. These embeddings are stored in ChromaDB along with document content and metadata in src/inserter.py. The embedding model can be configured via configs/*.json files.",
+      "metadata": {
+        "category": "retrieval",
+        "difficulty": "medium",
+        "topic": "embeddings"
+      }
+    },
+    {
+      "question": "What is the configuration system?",
+      "reference": "The system uses JSON-based configuration files in the configs/ directory. RAGConfig (src/config_loader.py) supports settings for prompt templates, model parameters (provider, name, temperature), retrieval (k_documents), text splitting (parser_threshold), and embeddings (model_name, distance_function). Configs include default.json, optimal.json, fast.json, and detailed.json.",
+      "metadata": {
+        "category": "configuration",
+        "difficulty": "medium",
+        "topic": "config_system"
+      }
+    },
+    {
+      "question": "How does the ChromaCollection class work?",
+      "reference": "ChromaCollection (src/inserter.py) manages a ChromaDB collection with RAG capabilities. It provides methods for insert_docs() to add code fragments with automatic embeddings, retrieve_k_similar_docs() for semantic search, and rag() for the full pipeline combining retrieval with LLM generation. It's initialized with a collection name and optional RAGConfig.",
+      "metadata": {
+        "category": "core_classes",
+        "difficulty": "hard",
+        "topic": "chroma_collection"
+      }
+    },
+    {
+      "question": "What are the main command-line arguments for main.py?",
+      "reference": "main.py accepts: -z/--zip for ZIP file path or -g/--github_link for repository URL (mutually exclusive), -p/--prompt for the query (required), -c/--collection-name for collection name (default: codeRAG), --config for JSON config path, and -v/--verbose for detailed logging.",
+      "metadata": {
+        "category": "usage",
+        "difficulty": "easy",
+        "topic": "cli_arguments"
+      }
+    },
+    {
+      "question": "How does language detection work?",
+      "reference": "Language detection (src/utils/language_detector.py) uses file extension mapping via the LANGUAGE_MAP dictionary. The detect_language() function extracts the file extension and returns the corresponding language string. The is_supported() function checks if a file type is in the supported set, and filter_supported_files() processes lists of paths.",
+      "metadata": {
+        "category": "utilities",
+        "difficulty": "easy",
+        "topic": "language_detection"
+      }
+    },
+    {
+      "question": "What is the LLM adapter pattern used in this codebase?",
+      "reference": "The codebase uses a Strategy + Factory pattern for LLM providers (src/llm/). BaseLLMProvider defines the interface with generate() method, concrete providers (GoogleProvider, OpenAIProvider) implement it, and LLMFactory creates instances with caching. This allows unified access to different LLM providers with automatic message format conversion.",
+      "metadata": {
+        "category": "architecture",
+        "difficulty": "hard",
+        "topic": "llm_adapter"
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Test queries for evaluating Codebase RAG system",
+    "num_samples": 10,
+    "with_references": 10,
+    "without_references": 0,
+    "created_for": "ragas_evaluation",
+    "coverage": [
+      "architecture",
+      "configuration",
+      "data_processing",
+      "features",
+      "retrieval",
+      "core_classes",
+      "usage",
+      "utilities"
+    ]
+  }
+}
