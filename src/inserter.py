@@ -200,7 +200,6 @@ class ChromaCollection():
 
         k = self.config.retrieval.k_documents
         documents, results = self.retrieve_k_similar_docs(query, k=k)
-
         if self.config.retrieval.similarity_threshold is not None:
             # TODO: Implementar filtrado por similarity threshold
             # Requiere acceso a distances de ChromaDB
@@ -213,10 +212,9 @@ class ChromaCollection():
                 preview = doc[:100].replace('\n', ' ') + "..." if len(doc) > 100 else doc.replace('\n', ' ')
                 print(f"   {i}. {preview}")
 
-        # AUGMENTATION: Unir documentos en un solo contexto
+
         information = "\n".join(documents)
 
-        # Limitar contexto según max_context_length de config
         max_length = self.config.prompt.max_context_length
         if len(information) > max_length:
             information = information[:max_length]
@@ -228,10 +226,8 @@ class ChromaCollection():
             print(f"   • Longitud del contexto: {len(information)} caracteres")
             print(f"   • Fragmentos incluidos: {len(documents)}")
 
-        # Cargar prompt desde archivo
         system_prompt = self.prompt_loader.load(self.prompt_template)
 
-        # Construir prompt con system + user message
         # TODO sanitize! UNICODE 
         messages = [
             {
@@ -240,17 +236,16 @@ class ChromaCollection():
             },
             {
                 "role": "user",
-                "content": f"Question: {query}\n\nInformation:\n{information}"
+                "content": f"Question: {query} \n\nInformation:\n{information}"
             }
         ]
         self.project_and_plot_relevant_docs(query=query, title=query, k_similar_results=results)
-        # GENERATION: Llamar al LLM para generar respuesta
+
         if verbose:
             print(f"\n⏳ Paso 3/3: Generando respuesta con {self.llm_client.model}...")
             print(f"   • Temperature: {self.config.model.temperature}")
             print(f"   • Tokens aproximados en contexto: ~{len(information) // 4}")
 
-        # Construir parámetros del LLM desde config
         llm_params = {
             # "model": model_name,
             "messages": messages,
@@ -276,9 +271,9 @@ class ChromaCollection():
                 completion_tok = response.usage.get('completion_tokens', 'N/A')
                 total_tok = response.usage.get('total_tokens', 'N/A')
                 print(f"   • Tokens usados: {total_tok} total ({prompt_tok} prompt + {completion_tok} completion)")
-
+        sources = [mdata["source"] for mdata in results["metadatas"][0]]
         content = response.text
-        return content
+        return content + f"\n Archivos referenciados: {sources}"
 
     def project_and_plot_relevant_docs(self,query, title, k_similar_results):
         embeddings=self.chroma_collection.get(include=['embeddings'])['embeddings']

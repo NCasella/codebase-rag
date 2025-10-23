@@ -60,7 +60,7 @@ def load_from_zipfile(zippath: str, parser_threshold: int = 3) -> list[Document]
 
             # Recorrer archivos extraídos
             for root, dirs, files in os.walk(temp_dir):
-                # Filtrar directorios ocultos
+                
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
 
                 for filename in files:
@@ -84,8 +84,8 @@ def load_from_zipfile(zippath: str, parser_threshold: int = 3) -> list[Document]
                         for doc in docs:
                             if doc.metadata is None:
                                 doc.metadata = {}
-                            doc.metadata['source_file'] = filename
                             doc.metadata['language'] = detect_language(filepath)
+                            doc.metadata["source"]= extract_from_zipname(filepath , zippath)
 
                         all_documents.extend(docs)
                         print(f"  → {len(docs)} fragmentos extraídos")
@@ -121,3 +121,10 @@ def load_from_github_link(github_link: str, parser_threshold: int = 3) -> list[D
 
     return load_from_zipfile(tmp_zip_path, parser_threshold=parser_threshold)
     
+def extract_from_zipname(path: str, zip_filename: str) -> str:
+    zip_name = os.path.splitext(os.path.basename(zip_filename))[0]
+    parts = path.split('/')
+    if zip_name in parts:
+        idx = parts.index(zip_name)
+        return '/'.join(parts[idx+1:])
+    return path
