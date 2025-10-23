@@ -197,7 +197,7 @@ class ChromaCollection():
 
         return unique_docs, num_duplicates
 
-    def insert_docs(self, docs: list[Document], skip_duplicates: bool = True) -> dict:
+    def insert_docs(self, docs: list[Document], skip_duplicates: bool = True, batch_size=1000) -> dict:
         """
         Inserta documentos en ChromaDB con embeddings automáticos.
 
@@ -241,11 +241,13 @@ class ChromaCollection():
 
         # Insertar documentos únicos
         print(f"📝 Insertando {len(docs_list)} documentos nuevos...")
-        self.chroma_collection.add(
-            ids=[str(uuid4()) for _ in docs_list],
-            documents=[doc.page_content for doc in docs_list],
-            metadatas=[doc.metadata for doc in docs_list]
-        )
+        for i in range(0,len(docs_list),batch_size):
+            end=i+batch_size    
+            self.chroma_collection.add(
+                ids=[str(uuid4()) for _ in docs_list[i:end]],
+                documents=[doc.page_content for doc in docs_list[i:end]],
+                metadatas=[doc.metadata for doc in docs_list[i:end]]
+            )
 
         return {
             "total": original_count,
