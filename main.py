@@ -144,6 +144,10 @@ if __name__ == "__main__":
 
     # Ejecutar RAG con logging mejorado
     res, response_obj = chroma.rag(query=user_prompt, verbose=verbose, conversation_id=conversation_id)
+    with open(f"{collection_name}.txt","a") as f:
+        f.write(f"Q: {user_prompt}\n")
+        f.write(f"A: {res}")
+        f.write("\n="*30)
 
     # ============================================================
     # RESULTADO FINAL
