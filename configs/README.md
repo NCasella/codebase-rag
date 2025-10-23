@@ -19,7 +19,7 @@ python main.py -z code.zip -p "pregunta" --config configs/default.json
 
 ---
 
-### 2. `optimal.json` - Máxima Calidad
+### 2. `optimal.json` - Máxima Calidad ⭐ CON RERANKING
 **Uso:** Análisis crítico, máxima precisión
 
 ```bash
@@ -27,11 +27,14 @@ python main.py -z code.zip -p "pregunta" --config configs/optimal.json
 ```
 
 **Características:**
-- Modelo: `gpt-4o` (mejor modelo)
-- K documentos: 8
-- Temperature: 0.05 (muy determinístico)
+- Modelo: `gpt-5-mini` (mejor modelo)
+- K documentos: 8 (después de reranking)
+- Temperature: 1.0
 - Embeddings: `all-mpnet-base-v2` (mejor calidad)
 - Max context: 12000 caracteres
+- **Reranking: Cross-Encoder habilitado** 🔥
+  - Recupera 20 documentos, reranquea y selecciona los 8 mejores
+  - Mejora significativa en relevancia de documentos
 
 ---
 
@@ -128,6 +131,51 @@ python main.py -z mi_proyecto.zip \
 
 ---
 
+### 6. `rerank_cross_encoder.json` - Reranking con Cross-Encoder ⭐ NUEVO
+**Uso:** Máxima precisión en selección de documentos relevantes
+
+```bash
+python main.py -z code.zip -p "pregunta" --config configs/rerank_cross_encoder.json
+```
+
+**Características:**
+- Modelo: `gemini-2.5-flash-lite`
+- Reranking: **Cross-Encoder** (máxima precisión)
+- Recupera: 20 documentos iniciales
+- Selecciona: 5 mejores después de reranking
+- Ideal para: Queries complejas donde la relevancia exacta es crítica
+
+**¿Cuándo usar Cross-Encoder?**
+- ✅ Queries técnicas específicas
+- ✅ Búsqueda de bugs o vulnerabilidades
+- ✅ Análisis de código crítico
+- ⚠️ Más lento que retrieval normal (evalúa cada par query-documento)
+
+---
+
+### 7. `rerank_mmr.json` - Reranking con MMR (Diversidad) ⭐ NUEVO
+**Uso:** Documentos diversos sin redundancia
+
+```bash
+python main.py -z code.zip -p "pregunta" --config configs/rerank_mmr.json
+```
+
+**Características:**
+- Modelo: `gemini-2.5-flash-lite`
+- Reranking: **MMR** (Maximal Marginal Relevance)
+- Recupera: 15 documentos iniciales
+- Selecciona: 5 diversos después de reranking
+- Lambda: 0.7 (70% relevancia, 30% diversidad)
+- Ideal para: Obtener diferentes perspectivas del código
+
+**¿Cuándo usar MMR?**
+- ✅ Explorar diferentes partes del código
+- ✅ Evitar fragmentos repetitivos
+- ✅ Obtener overview completo del sistema
+- ⚠️ Rápido (no requiere modelo adicional)
+
+---
+
 ## Crear Tu Propia Configuración
 
 1. Copia una configuración base:
@@ -179,6 +227,25 @@ python main.py -z code.zip -p "pregunta" --config configs/mi_config.json
   - `all-mpnet-base-v2` - Mejor calidad, más lento
 - `device`: `cpu` o `cuda` (para GPU)
 
+### `rerank` ⭐ NUEVO
+Mejora la relevancia de documentos recuperados mediante reranking.
+
+- `enabled`: `true` para activar reranking, `false` para desactivar
+- `strategy`: Estrategia de reranking
+  - `none` - Sin reranking (default)
+  - `cross_encoder` - Usa Cross-Encoder para scoring preciso (más lento, más preciso)
+  - `mmr` - Maximal Marginal Relevance para diversidad (rápido, evita redundancia)
+- `retrieve_k`: Número de documentos a recuperar antes de reranking (ej: 20)
+- `top_n`: Número de documentos a seleccionar después de reranking (ej: 5)
+- `cross_encoder_model`: Modelo de cross-encoder a usar (solo para strategy=cross_encoder)
+  - `cross-encoder/ms-marco-MiniLM-L-12-v2` - Balanceado (default)
+  - `cross-encoder/ms-marco-MiniLM-L-6-v2` - Más rápido
+- `cross_encoder_device`: `cpu` o `cuda` (para GPU)
+- `mmr_lambda`: Balance relevancia/diversidad para MMR (0.0-1.0)
+  - `0.0` - Máxima diversidad
+  - `0.5` - Balanceado (default)
+  - `1.0` - Máxima relevancia
+
 ## Trade-offs
 
 | Parámetro | ⬆️ Aumentar | ⬇️ Disminuir |
@@ -187,18 +254,22 @@ python main.py -z code.zip -p "pregunta" --config configs/mi_config.json
 | **temperature** | Más creativo/variado<br>⚠️ Menos preciso | Más determinístico<br>⚠️ Menos creativo |
 | **max_tokens** | Respuestas completas<br>⚠️ Más caro | Respuestas concisas<br>⚠️ Puede truncar |
 | **parser_threshold** | Fragmentos con más contexto<br>⚠️ Menos granularidad | Fragmentos granulares<br>⚠️ Puede perder contexto |
+| **rerank.retrieve_k** ⭐ | Más candidatos para reranking<br>⚠️ Más lento (especialmente con cross-encoder) | Más rápido<br>⚠️ Puede perder buenos candidatos |
+| **rerank.mmr_lambda** ⭐ | Más relevancia, menos diversidad | Más diversidad, menos relevancia |
 
 ## Casos de Uso por Configuración
 
 | Tarea | Config Recomendada | Por qué |
 |-------|-------------------|---------|
-| Entender código nuevo | `optimal.json` | Máxima precisión, más contexto |
+| Entender código nuevo | `optimal.json` | Máxima precisión + reranking |
 | Debugging rápido | `fast.json` | Respuestas rápidas |
 | Generar documentación | `detailed.json` | Explicaciones exhaustivas |
 | Generar tests | `test_generator.json` ⭐ | Prompt especializado |
 | Explicar a principiantes | `default.json` + prompt `beginner_friendly` | Balance + tono educativo |
-| Análisis de seguridad | `optimal.json` | Máxima precisión |
+| Análisis de seguridad | `rerank_cross_encoder.json` ⭐ | Máxima precisión en selección |
 | Code review | `detailed.json` | Análisis profundo |
+| Explorar arquitectura | `rerank_mmr.json` ⭐ | Diversidad de componentes |
+| Búsqueda técnica precisa | `rerank_cross_encoder.json` ⭐ | Relevancia exacta |
 
 ## Ejemplos Completos
 
@@ -227,3 +298,35 @@ python main.py -z proyecto.zip \
   -p "explica qué hace la clase UserManager" \
   --config configs/fast.json
 ```
+
+### Búsqueda Técnica con Reranking ⭐ NUEVO
+```bash
+# Cross-Encoder: máxima precisión
+python main.py -z backend.zip \
+  -p "encuentra todas las funciones que manejan autenticación JWT" \
+  --config configs/rerank_cross_encoder.json \
+  -v
+
+# MMR: diversidad sin redundancia
+python main.py -z microservices.zip \
+  -p "explica la arquitectura general del sistema" \
+  --config configs/rerank_mmr.json \
+  -v
+```
+
+## Comparación de Estrategias de Reranking
+
+| Aspecto | Sin Reranking | Cross-Encoder | MMR |
+|---------|---------------|---------------|-----|
+| **Velocidad** | ⚡⚡⚡ Rápido | ⚡ Lento | ⚡⚡ Medio |
+| **Precisión** | ⭐⭐ Buena | ⭐⭐⭐ Excelente | ⭐⭐ Buena |
+| **Diversidad** | ⭐ Baja | ⭐ Baja | ⭐⭐⭐ Alta |
+| **Costo computacional** | Bajo | Alto | Bajo |
+| **Modelo adicional** | ❌ No | ✅ Sí | ❌ No |
+| **Usa embeddings** | ✅ Sí | ❌ No | ✅ Sí |
+| **Mejor para** | Queries simples | Queries técnicas precisas | Exploración amplia |
+
+**Recomendación:**
+- 🎯 **Cross-Encoder**: Para búsquedas críticas donde cada documento debe ser perfectamente relevante
+- 🌈 **MMR**: Para obtener una visión completa evitando fragmentos similares
+- ⚡ **Sin reranking**: Para desarrollo rápido o queries simples

@@ -9,6 +9,7 @@
   },
 
   "model": {
+    "provider": "openai",
     "name": "gpt-4o",
     "temperature": 0.2,
     "max_tokens": 2000,
@@ -30,5 +31,10 @@
     "device": "cpu",
     "normalize_embeddings": true,
     "distance_function":"cosine"
+  },
+
+  "rerank": {
+    "enabled": false,
+    "strategy": "none"
   }
 }

@@ -53,6 +53,24 @@ class EmbeddingsConfig:
 
 
 @dataclass
+class RerankConfig:
+    """Configuración de reranking."""
+    enabled: bool = False
+    strategy: str = "none"  # none, cross_encoder, mmr
+
+    # Parámetros generales
+    retrieve_k: int = 20  # Documentos a recuperar antes de reranking
+    top_n: int = 5        # Documentos finales después de reranking
+
+    # Cross-encoder specific
+    cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    cross_encoder_device: str = "cpu"
+
+    # MMR specific
+    mmr_lambda: float = 0.5  # 0=máxima diversidad, 1=máxima relevancia
+
+
+@dataclass
 class RAGConfig:
     """
     Configuración completa del sistema RAG.
@@ -65,6 +83,7 @@ class RAGConfig:
         retrieval: Configuración de retrieval
         text_splitting: Configuración de text splitting
         embeddings: Configuración de embeddings
+        rerank: Configuración de reranking
 
     Example:
         >>> config = RAGConfig.from_json("configs/optimal.json")
@@ -78,6 +97,7 @@ class RAGConfig:
     retrieval: RetrievalConfig
     text_splitting: TextSplittingConfig
     embeddings: EmbeddingsConfig
+    rerank: RerankConfig
 
     @classmethod
     def from_json(cls, json_path: str) -> 'RAGConfig':
@@ -111,7 +131,7 @@ class RAGConfig:
         except json.JSONDecodeError as e:
             raise ValueError(f"JSON inválido en {json_path}: {e}")
 
-        # Validar campos requeridos
+        # Validar campos requeridos (rerank es opcional)
         required_fields = ['name', 'description', 'prompt', 'model', 'retrieval',
                           'text_splitting', 'embeddings']
         missing = [field for field in required_fields if field not in data]
@@ -127,7 +147,8 @@ class RAGConfig:
                 model=ModelConfig(**data.get('model', {})),
                 retrieval=RetrievalConfig(**data.get('retrieval', {})),
                 text_splitting=TextSplittingConfig(**data.get('text_splitting', {})),
-                embeddings=EmbeddingsConfig(**data.get('embeddings', {}))
+                embeddings=EmbeddingsConfig(**data.get('embeddings', {})),
+                rerank=RerankConfig(**data.get('rerank', {}))
             )
         except TypeError as e:
             raise ValueError(f"Error al parsear configuración: {e}")
@@ -174,6 +195,23 @@ class RAGConfig:
         if self.prompt.max_context_length <= 0:
             raise ValueError(f"max_context_length debe ser positivo, got {self.prompt.max_context_length}")
 
+        # Validar rerank
+        valid_strategies = ["none", "cross_encoder", "mmr"]
+        if self.rerank.strategy not in valid_strategies:
+            raise ValueError(f"rerank.strategy debe ser uno de {valid_strategies}, got '{self.rerank.strategy}'")
+
+        if self.rerank.retrieve_k <= 0:
+            raise ValueError(f"rerank.retrieve_k debe ser positivo, got {self.rerank.retrieve_k}")
+
+        if self.rerank.top_n <= 0:
+            raise ValueError(f"rerank.top_n debe ser positivo, got {self.rerank.top_n}")
+
+        if self.rerank.top_n > self.rerank.retrieve_k:
+            raise ValueError(f"rerank.top_n ({self.rerank.top_n}) no puede ser mayor que retrieve_k ({self.rerank.retrieve_k})")
+
+        if self.rerank.mmr_lambda < 0 or self.rerank.mmr_lambda > 1:
+            raise ValueError(f"rerank.mmr_lambda debe estar entre 0 y 1, got {self.rerank.mmr_lambda}")
+
     def to_dict(self) -> dict:
         """
         Convierte la configuración a diccionario.
@@ -208,6 +246,15 @@ class RAGConfig:
                 'model_name': self.embeddings.model_name,
                 'device': self.embeddings.device,
                 'normalize_embeddings': self.embeddings.normalize_embeddings
+            },
+            'rerank': {
+                'enabled': self.rerank.enabled,
+                'strategy': self.rerank.strategy,
+                'retrieve_k': self.rerank.retrieve_k,
+                'top_n': self.rerank.top_n,
+                'cross_encoder_model': self.rerank.cross_encoder_model,
+                'cross_encoder_device': self.rerank.cross_encoder_device,
+                'mmr_lambda': self.rerank.mmr_lambda
             }
         }
 
@@ -236,5 +283,6 @@ def get_default_config() -> RAGConfig:
         model=ModelConfig(),
         retrieval=RetrievalConfig(),
         text_splitting=TextSplittingConfig(),
-        embeddings=EmbeddingsConfig()
+        embeddings=EmbeddingsConfig(),
+        rerank=RerankConfig()
     )
