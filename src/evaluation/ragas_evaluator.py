@@ -11,6 +11,7 @@ Provides comprehensive evaluation functionality with:
 import json
 import sys
 import os
+import csv
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any, Tuple
@@ -677,7 +678,7 @@ class RAGASEvaluator:
 
         if format == 'csv':
             # Export sample-level results to CSV with reordered columns
-            df = results['dataset']
+            df = results['dataset'].copy()
 
             # Reorder columns: metrics first, then prompt data last
             # Prompt data columns to move to end
@@ -692,7 +693,27 @@ class RAGASEvaluator:
             # Reorder dataframe
             df = df[ordered_cols]
 
-            df.to_csv(output_path, index=False)
+            # Handle list fields (e.g., retrieved_contexts) by converting to JSON string
+            # This prevents CSV parsing issues with lists
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    # Check if column contains list values
+                    if df[col].apply(lambda x: isinstance(x, list)).any():
+                        # Convert lists to JSON strings for proper CSV encoding
+                        df[col] = df[col].apply(lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, list) else x)
+
+            # Export with proper CSV quoting to handle special characters
+            # - QUOTE_NONNUMERIC: Quotes all non-numeric fields (strings)
+            # - doublequote=True: Escape quotes by doubling them (RFC 4180 standard)
+            # - encoding='utf-8-sig': UTF-8 with BOM for Excel compatibility
+            df.to_csv(
+                output_path,
+                index=False,
+                quoting=csv.QUOTE_NONNUMERIC,
+                doublequote=True,
+                encoding='utf-8-sig',
+                lineterminator='\n'
+            )
 
             # Export metadata to companion JSON file
             metadata_path = output_path.with_suffix('.metadata.json')
@@ -727,11 +748,17 @@ class RAGASEvaluator:
             # Export to Excel with multiple sheets
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
                 # Reorder columns for sample-level scores
-                df = results['dataset']
+                df = results['dataset'].copy()
                 prompt_cols = ['user_input', 'retrieved_contexts', 'response', 'reference']
                 metric_cols = [col for col in df.columns if col not in prompt_cols]
                 ordered_cols = metric_cols + [col for col in prompt_cols if col in df.columns]
                 df = df[ordered_cols]
+
+                # Handle list fields by converting to JSON string for Excel compatibility
+                for col in df.columns:
+                    if df[col].dtype == 'object':
+                        if df[col].apply(lambda x: isinstance(x, list)).any():
+                            df[col] = df[col].apply(lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, list) else x)
 
                 # Sample-level scores
                 df.to_excel(writer, sheet_name='Results', index=False)
@@ -757,7 +784,7 @@ class RAGASEvaluator:
 
         # Try to get optional package versions
         try:
-            import google.generativeai as genai
+            import google.genai as genai
             google_genai_version = genai.__version__
         except:
             google_genai_version = "N/A"
