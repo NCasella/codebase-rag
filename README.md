@@ -567,6 +567,10 @@ codebase-rag/
 │   ├── concise.txt
 │   ├── spanish.txt
 │   └── beginner_friendly.txt
+├── dataset/                      # Datasets de prueba
+│   ├── jam-py-v7-develop.zip    # Proyecto web (JS/Python) ~15MB
+│   ├── numpy-main.zip           # Librería científica (Python/C) ~10MB
+│   └── SMTP-Protos-main.zip     # Protocolo de red (C) ~200KB
 ├── tests/
 │   └── test_language_detector.py
 ├── context/                      # Material de referencia del curso
@@ -578,6 +582,50 @@ codebase-rag/
 ├── .env                          # Tus API keys (crear este archivo)
 ├── .gitignore
 └── README.md
+```
+
+## Datasets de Prueba
+
+El directorio `dataset/` contiene varios proyectos de código de diferentes tamaños y lenguajes de programación para probar y evaluar el sistema RAG:
+
+### Proyectos Incluidos
+
+1. **SMTP-Protos (main)** - ~200KB
+   - Implementación de protocolo de red
+   - Lenguaje: C
+   - Tamaño: Pequeño
+   - Ideal para: Pruebas rápidas, código de bajo nivel, protocolos livianos
+
+2. **jam-py (v7-develop)** - ~15MB
+   - Framework web full-stack
+   - Lenguajes: JavaScript, Python
+   - Tamaño: Pequeño-Mediano (archivos grandes)
+   - Ideal para: Probar parseo multi-lenguaje, arquitecturas web
+
+3. **NumPy (main)** - ~10MB
+   - Librería científica de Python
+   - Lenguajes: Python, C
+   - Tamaño: Mediano-Grande
+   - Ideal para: Integración Python/C, documentación técnica, código científico complejo
+
+### Uso de los Datasets
+
+Estos proyectos permiten evaluar el sistema en diferentes escenarios:
+- **Variedad de lenguajes**: C, JavaScript, Python
+- **Diferentes tamaños**: Desde pequeño (~200KB) hasta mediano-grande (~10MB)
+- **Diversos dominios**: Protocolos de red, aplicaciones web, computación científica
+- **Complejidad variada**: Protocolos simples vs librerías científicas complejas
+
+**Ejemplo de uso:**
+```bash
+# Proyecto pequeño (C)
+python main.py -z dataset/SMTP-Protos-main.zip -p "¿Cómo funciona el protocolo?"
+
+# Proyecto pequeño-mediano (JS/Python)
+python main.py -z dataset/jam-py-v7-develop.zip -p "Explicame la arquitectura del framework"
+
+# Proyecto mediano-grande (Python/C)
+python main.py -z dataset/numpy-main.zip -p "¿Qué hace la función array?"
 ```
 
 ## Desafíos Técnicos
