@@ -17,6 +17,7 @@ class PromptConfig:
     template: str = "default"
     include_metadata: bool = True
     max_context_length: int = 8000
+    plot_enabled: bool = True  # Habilitar/deshabilitar generación de plots UMAP
 
 
 @dataclass
@@ -225,7 +226,8 @@ class RAGConfig:
             'prompt': {
                 'template': self.prompt.template,
                 'include_metadata': self.prompt.include_metadata,
-                'max_context_length': self.prompt.max_context_length
+                'max_context_length': self.prompt.max_context_length,
+                'plot_enabled': self.prompt.plot_enabled
             },
             'model': {
                 'provider': self.model.provider,

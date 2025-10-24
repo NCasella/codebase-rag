@@ -5,7 +5,8 @@
   "prompt": {
     "template": "test_generator",
     "include_metadata": true,
-    "max_context_length": 12000
+    "max_context_length": 12000,
+    "plot_enabled": false
   },
 
   "model": {

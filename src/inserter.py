@@ -352,7 +352,10 @@ class ChromaCollection():
                 "content": f"Question: {query} \n\nInformation:\n{llm_info}"
             }
         ]
-        self.project_and_plot_relevant_docs(query=query, title=query, k_similar_results=results)
+
+        # Solo plotear si está habilitado en la configuración
+        if self.config.prompt.plot_enabled:
+            self.project_and_plot_relevant_docs(query=query, title=query, k_similar_results=results)
 
         if verbose:
             print(f"\n⏳ Paso 3/3: Generando respuesta con {self.llm_client.model}...")

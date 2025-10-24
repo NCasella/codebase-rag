@@ -22,7 +22,7 @@ if __name__ == "__main__":
     group = arg_parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-z", "--zip", help="Ruta al archivo ZIP con el código")
     group.add_argument("-g", "--github_link", help="URL del repositorio de GitHub")
-    arg_parser.add_argument("-p", "--prompt", required=True, help="Pregunta sobre el código")
+    arg_parser.add_argument("-p", "--prompt", help="Pregunta sobre el código (modo single-shot). Si se omite, entra en modo chat interactivo")
     arg_parser.add_argument("-c", "--collection-name", default="codeRAG", help="Nombre de la colección")
     arg_parser.add_argument("--config", help="Ruta al archivo de configuración JSON (ej: configs/optimal.json)")
     arg_parser.add_argument("-v", "--verbose", action="store_true", help="Mostrar logs detallados del proceso RAG")
@@ -119,62 +119,70 @@ if __name__ == "__main__":
         print(f"✅ {stats['inserted']} fragmentos indexados correctamente")
 
     # ============================================================
-    # FASE 3: CONSULTA RAG
+    # FASE 3: CONSULTA RAG o MODO CHAT
     # ============================================================
-    print("\n" + "="*60)
-    print("  FASE 3: CONSULTA RAG (RETRIEVAL + GENERATION)")
-    print("="*60)
 
-    print(f"\n❓ Pregunta del usuario:")
-    print(f"   '{user_prompt}'")
+    if user_prompt:
+        # MODO SINGLE-SHOT: Una query y salir
+        print("\n" + "="*60)
+        print("  FASE 3: CONSULTA RAG (RETRIEVAL + GENERATION)")
+        print("="*60)
 
-    if config and verbose:
-        print(f"\n📋 Configuración activa:")
-        print(f"   • Recuperar: {config.retrieval.k_documents} documentos")
-        print(f"   • Modelo: {config.model.name} (temp={config.model.temperature})")
-        print(f"   • Max context: {config.prompt.max_context_length} caracteres")
+        print(f"\n❓ Pregunta del usuario:")
+        print(f"   '{user_prompt}'")
 
-    if verbose:
-        print(f"\n⏳ Paso 1/3: Buscando fragmentos relevantes...")
-        print(f"   (Búsqueda semántica en {len(docs)} fragmentos)")
+        if config and verbose:
+            print(f"\n📋 Configuración activa:")
+            print(f"   • Recuperar: {config.retrieval.k_documents} documentos")
+            print(f"   • Modelo: {config.model.name} (temp={config.model.temperature})")
+            print(f"   • Max context: {config.prompt.max_context_length} caracteres")
 
-    if conversation_id:
         if verbose:
-            print(f"\n🔄 Continuando conversación: {conversation_id}")
+            print(f"\n⏳ Paso 1/3: Buscando fragmentos relevantes...")
+            print(f"   (Búsqueda semántica en {len(docs)} fragmentos)")
 
-    # Ejecutar RAG con logging mejorado
-    res, response_obj = chroma.rag(query=user_prompt, verbose=verbose, conversation_id=conversation_id)
-    with open(f"output/{collection_name}.txt","a") as f:
-        f.write(f"Q: {user_prompt}\n")
-        f.write(f"A: {res}\n")
-        f.write("="*30)
+        if conversation_id:
+            if verbose:
+                print(f"\n🔄 Continuando conversación: {conversation_id}")
 
-    # ============================================================
-    # RESULTADO FINAL
-    # ============================================================
-    print("\n" + "="*60)
-    print("  RESPUESTA FINAL")
-    print("="*60 + "\n")
-    print(res)
-    print("\n" + "="*60)
+        # Ejecutar RAG con logging mejorado
+        res, response_obj = chroma.rag(query=user_prompt, verbose=verbose, conversation_id=conversation_id)
+        with open(f"output/{collection_name}.txt","a") as f:
+            f.write(f"Q: {user_prompt}\n")
+            f.write(f"A: {res}\n")
+            f.write("="*30)
 
-    # ============================================================
-    # GUARDAR CONVERSATION ID PARA CONTINUACIÓN
-    # ============================================================
-    if response_obj and response_obj.conversation_id:
-        # Crear directorio output si no existe
-        output_dir = Path("output")
-        output_dir.mkdir(exist_ok=True)
+        # ============================================================
+        # RESULTADO FINAL
+        # ============================================================
+        print("\n" + "="*60)
+        print("  RESPUESTA FINAL")
+        print("="*60 + "\n")
+        print(res)
+        print("\n" + "="*60)
 
-        # Generar nombre de archivo con timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = output_dir / f"{timestamp}.txt"
+        # ============================================================
+        # GUARDAR CONVERSATION ID PARA CONTINUACIÓN
+        # ============================================================
+        if response_obj and response_obj.conversation_id:
+            # Crear directorio output si no existe
+            output_dir = Path("output")
+            output_dir.mkdir(exist_ok=True)
 
-        # Guardar conversation_id
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(response_obj.conversation_id)
+            # Generar nombre de archivo con timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = output_dir / f"{timestamp}.txt"
 
-        print(f"\n💾 Conversation ID guardado en: {output_file}")
-        print(f"   Para continuar esta conversación, use: --conversation-id {response_obj.conversation_id}")
-    elif conversation_id:
-        print(f"\n⚠️  Nota: El proveedor actual no soporta continuación de conversación")
+            # Guardar conversation_id
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(response_obj.conversation_id)
+
+            print(f"\n💾 Conversation ID guardado en: {output_file}")
+            print(f"   Para continuar esta conversación, use: --conversation-id {response_obj.conversation_id}")
+        elif conversation_id:
+            print(f"\n⚠️  Nota: El proveedor actual no soporta continuación de conversación")
+
+    else:
+        # MODO CHAT INTERACTIVO: Loop infinito hasta /exit
+        from src.chat import start_chat
+        start_chat(chroma, config if config else chroma.config)

@@ -5,7 +5,8 @@
   "prompt": {
     "template": "detailed",
     "include_metadata": true,
-    "max_context_length": 10000
+    "max_context_length": 10000,
+    "plot_enabled": false
   },
 
   "model": {

@@ -75,9 +75,106 @@ OPENAI_API_KEY=tu_api_key_aqui
 
 ## Guía de Uso
 
-### Uso Básico
+El sistema soporta **dos modos de operación**:
 
-El script principal permite indexar una codebase desde un archivo ZIP o GitHub y consultarla:
+1. **Modo Chat Interactivo** (nuevo): Conversaciones multi-turno con contexto mantenido
+2. **Modo Single-Shot**: Una pregunta, una respuesta y salida (modo original)
+
+---
+
+### 💬 Modo Chat Interactivo (Recomendado)
+
+Modo conversacional que mantiene el contexto entre preguntas. Ideal para exploración de código.
+
+#### Desde archivo ZIP:
+```bash
+python main.py -z <ruta_al_zip> --config configs/chat_openai.json
+```
+
+**Ejemplo:**
+```bash
+python main.py -z test_data --config configs/chat_openai.json
+```
+
+**Sesión ejemplo:**
+```
+====================================
+  MODO CHAT INTERACTIVO
+====================================
+
+Config: chat_openai
+Modelo: gpt-4o-mini
+
+Comandos: /help, /clear, /exit
+
+====================================
+
+Q: ¿Cómo se crea un usuario?
+Buscando...
+A: Para crear un usuario, instancia la clase Usuario...
+
+Q: ¿Y cómo le asigno un rol?
+Buscando...
+A: (Recuerda el contexto anterior sobre usuarios)
+Los roles están definidos en config.py...
+
+Q: /clear
+Conversación reiniciada
+
+Q: /exit
+Hasta pronto!
+```
+
+#### Desde repositorio de GitHub:
+```bash
+python main.py -g <url_github> --config configs/chat_openai.json
+```
+
+#### Comandos disponibles en modo chat:
+
+| Comando | Descripción |
+|---------|-------------|
+| `/help` | Mostrar ayuda de comandos |
+| `/clear` | Reiniciar conversación (nuevo contexto) |
+| `/exit` | Salir del chat |
+
+#### Configuraciones para modo chat:
+
+El sistema incluye configuraciones optimizadas para chat con OpenAI (soporta historial conversacional):
+
+**1. `chat_openai.json` - Balanceada** (Recomendada)
+```bash
+python main.py -z proyecto.zip --config configs/chat_openai.json
+```
+- Modelo: `gpt-4o-mini` (balance calidad/costo)
+- Reranking: Cross-Encoder habilitado
+- Historial: ✅ Completo
+
+**2. `chat_openai_fast.json` - Rápida y económica**
+```bash
+python main.py -z proyecto.zip --config configs/chat_openai_fast.json
+```
+- Modelo: `gpt-3.5-turbo` (más barato)
+- Sin reranking (más rápido)
+- Historial: ✅ Completo
+
+**3. `chat_openai_premium.json` - Máxima calidad**
+```bash
+python main.py -z proyecto.zip --config configs/chat_openai_premium.json
+```
+- Modelo: `gpt-4o` (el mejor)
+- Reranking agresivo (25→8 docs)
+- Historial: ✅ Completo
+
+**Nota:** Solo OpenAI soporta historial conversacional. Con Gemini cada pregunta es independiente.
+
+Ver documentación completa: [configs/CHAT_CONFIGS.md](configs/CHAT_CONFIGS.md)
+
+---
+
+### 📝 Modo Single-Shot
+
+Una pregunta, una respuesta. Útil para scripts y automatización.
 
 #### Desde archivo ZIP:
 ```bash
