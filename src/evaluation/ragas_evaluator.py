@@ -131,6 +131,10 @@ class EvaluationConfig:
         'max_retries': 3,
         'timeout': 60
     })
+    # RAG-specific config for evaluation runs (optional)
+    retrieval: Optional[Dict[str, Any]] = None
+    text_splitting: Optional[Dict[str, Any]] = None
+    rerank: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_json(cls, json_path: str) -> 'EvaluationConfig':
@@ -672,8 +676,22 @@ class RAGASEvaluator:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if format == 'csv':
-            # Export sample-level results to CSV
+            # Export sample-level results to CSV with reordered columns
             df = results['dataset']
+
+            # Reorder columns: metrics first, then prompt data last
+            # Prompt data columns to move to end
+            prompt_cols = ['user_input', 'retrieved_contexts', 'response', 'reference']
+
+            # Get metric columns (everything except prompt data)
+            metric_cols = [col for col in df.columns if col not in prompt_cols]
+
+            # Build ordered column list: metrics first, then prompt data (only if present)
+            ordered_cols = metric_cols + [col for col in prompt_cols if col in df.columns]
+
+            # Reorder dataframe
+            df = df[ordered_cols]
+
             df.to_csv(output_path, index=False)
 
             # Export metadata to companion JSON file
@@ -708,8 +726,15 @@ class RAGASEvaluator:
         elif format == 'excel':
             # Export to Excel with multiple sheets
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                # Reorder columns for sample-level scores
+                df = results['dataset']
+                prompt_cols = ['user_input', 'retrieved_contexts', 'response', 'reference']
+                metric_cols = [col for col in df.columns if col not in prompt_cols]
+                ordered_cols = metric_cols + [col for col in prompt_cols if col in df.columns]
+                df = df[ordered_cols]
+
                 # Sample-level scores
-                results['dataset'].to_excel(writer, sheet_name='Results', index=False)
+                df.to_excel(writer, sheet_name='Results', index=False)
 
                 # Summary scores
                 summary_df = pd.DataFrame([results['scores']])

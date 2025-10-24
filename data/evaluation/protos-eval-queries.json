@@ -1,0 +1,230 @@
+{
+  "samples": [
+    {
+      "question": "What is the main purpose of this SMTP server project?",
+      "reference": "This is an SMTP (Simple Mail Transfer Protocol) email server with non-blocking I/O architecture and a monitoring system. It implements a non-blocking SMTP server that handles multiple email client connections simultaneously, uses maildir-based email storage, includes a monitoring interface to collect statistics about server performance, supports custom command execution on received emails, and provides logging and access registry for audit trails. It is written in C (C11 standard) using POSIX APIs and is designed for academic/educational purposes.",
+      "metadata": {
+        "category": "architecture",
+        "difficulty": "easy",
+        "topic": "project_overview"
+      }
+    },
+    {
+      "question": "What are the default TCP and UDP ports used by the SMTP server?",
+      "reference": "The SMTP server uses TCP port 2525 as the default port for SMTP connections (both IPv4 and IPv6), and UDP port 2526 for the monitoring interface. Port 2526 is reserved and cannot be used for SMTP traffic, as indicated in main.c lines 67-70.",
+      "metadata": {
+        "category": "configuration",
+        "difficulty": "easy",
+        "topic": "networking"
+      }
+    },
+    {
+      "question": "Which I/O multiplexing system call is used by the selector implementation?",
+      "reference": "The selector implementation uses the select(2) system call for I/O multiplexing. This is documented in selector.h which describes the selector as hiding the final implementation (select(2) / poll(2) / epoll(2)), and the actual implementation uses select(2) to monitor multiple file descriptors for non-blocking I/O operations.",
+      "metadata": {
+        "category": "implementation",
+        "difficulty": "medium",
+        "topic": "io_multiplexing"
+      }
+    },
+    {
+      "question": "How does the server achieve non-blocking I/O on sockets?",
+      "reference": "The server achieves non-blocking I/O by using the selector_fd_set_nio() function which sets the O_NONBLOCK flag on file descriptors using fcntl(). This is applied to all server sockets (both IPv4 and IPv6, for both SMTP and monitoring) as seen in main.c lines 247-263. This ensures the server never blocks on I/O operations, allowing it to handle multiple concurrent connections with a single thread.",
+      "metadata": {
+        "category": "implementation",
+        "difficulty": "medium",
+        "topic": "non_blocking_io"
+      }
+    },
+    {
+      "question": "What is the maildir directory structure created for storing emails?",
+      "reference": "The maildir structure follows the standard format: mail/<domain>/<user>/ with three subdirectories: 'tmp' (for temporary files being written), 'new' (for new unread emails), and 'cur' (for read emails). For example, for user1@local, the structure would be: mail/local/user1/tmp/, mail/local/user1/new/, and mail/local/user1/cur/. Files are named with timestamps and random strings to ensure uniqueness.",
+      "metadata": {
+        "category": "architecture",
+        "difficulty": "medium",
+        "topic": "email_storage"
+      }
+    },
+    {
+      "question": "Describe the two-level state machine architecture used in this server.",
+      "reference": "The server implements a two-level state machine architecture. Level 1 is the Socket State Machine (stm.c) which handles socket-level events: REQUEST_READ → REQUEST_WRITE → REQUEST_DATA → REQUEST_ADMIN → REQUEST_DONE, with events like read_ready, write_ready, block_ready, and close, managed by the selector and synchronized with I/O availability. Level 2 is the SMTP Protocol State Machine (states.h) which handles protocol-level states: EHLO, FROM, TO, DATA, BODY, DONE, ERROR, and admin states (XAUTH, XFROM, XGET, XTRAN, XQUIT), with transitions triggered by command parsing.",
+      "metadata": {
+        "category": "architecture",
+        "difficulty": "hard",
+        "topic": "state_machines"
+      }
+    },
+    {
+      "question": "What are the command-line arguments required to start the SMTP server?",
+      "reference": "The SMTP server requires exactly 2 command-line arguments: port number and command. Usage is: ./smtpd.elf <port> <command>. The port must be a valid integer between 0 and 65535 (excluding 2526 which is reserved for monitoring). The command must be an executable file path that will be invoked on received emails. Either argument can be '-' to use defaults (port 2525 and no command). This is defined in main.c lines 47-91.",
+      "metadata": {
+        "category": "configuration",
+        "difficulty": "easy",
+        "topic": "command_line"
+      }
+    },
+    {
+      "question": "What monitoring commands are available in the monitor protocol?",
+      "reference": "The monitor protocol supports 6 commands as defined in client_monitor.h: HIST (0x00) for connection history, CONC (0x01) for current concurrent connections, BYTES (0x02) for bytes transferred, STATUS (0x03) for server status, TRANS_ON (0x04) to enable transformation, and TRANS_OFF (0x05) to disable transformation. These commands are sent via UDP to port 2526.",
+      "metadata": {
+        "category": "monitoring",
+        "difficulty": "medium",
+        "topic": "monitor_protocol"
+      }
+    },
+    {
+      "question": "Which signals does the server handle for graceful shutdown?",
+      "reference": "The server handles SIGTERM and SIGINT signals for graceful shutdown. These signals are registered in main.c lines 243-244 using the sigterm_handler function. When either signal is received, the handler sets the 'done' flag to true, which causes the main event loop to exit gracefully, allowing proper cleanup of resources including selector destruction, socket closing, and logger finalization.",
+      "metadata": {
+        "category": "implementation",
+        "difficulty": "medium",
+        "topic": "signal_handling"
+      }
+    },
+    {
+      "question": "How does the buffer implementation optimize I/O operations?",
+      "reference": "The buffer implementation uses ring buffers (circular buffers) for efficient I/O operations. Ring buffers eliminate the need for data copying when reading and writing, as they allow continuous circular access to a fixed-size buffer. This design is particularly efficient for non-blocking I/O scenarios where data arrives in chunks, as implemented in buffer.c. Each SMTP connection gets its own ring buffers for handling incoming and outgoing data streams.",
+      "metadata": {
+        "category": "implementation",
+        "difficulty": "hard",
+        "topic": "data_structures"
+      }
+    },
+    {
+      "question": "What socket options are set on the monitoring UDP sockets and why?",
+      "reference": "The monitoring UDP sockets have two main socket options set: SO_REUSEADDR (to allow address reuse) and SO_LINGER (with l_onoff=1 and l_linger=0 to make close operations non-blocking). The SO_LINGER option is particularly important for UDP sockets because by default, close operations are blocking. Setting l_linger to 0 ensures that close() returns immediately without waiting for queued data to be sent. This is configured in main.c lines 170-207 for both IPv4 and IPv6 monitoring sockets.",
+      "metadata": {
+        "category": "networking",
+        "difficulty": "hard",
+        "topic": "socket_options"
+      }
+    },
+    {
+      "question": "What is the purpose of the access_registry component?",
+      "reference": "The access_registry component provides a persistent audit trail for all email transactions. It tracks FROM addresses, TO addresses, timestamps, and file paths for each email processed by the server. This enables administrators to query email history and supports admin commands for filtering by user, date range, or specific day. The registry is initialized in main.c line 330 and freed during cleanup, providing complete accountability for all email operations.",
+      "metadata": {
+        "category": "features",
+        "difficulty": "medium",
+        "topic": "audit_logging"
+      }
+    },
+    {
+      "question": "How does the server handle custom command execution on received emails?",
+      "reference": "The server can spawn a subprocess to execute a custom command on each received email through the process.c module. When an email is accepted and stored, the server uses execve() to run the specified command (provided at startup) with the email file path as an argument. This allows integration with external tools like antivirus scanners, spam filters, or other email processing utilities. The command is validated at startup to ensure it's executable (main.c lines 73-91).",
+      "metadata": {
+        "category": "features",
+        "difficulty": "medium",
+        "topic": "email_processing"
+      }
+    },
+    {
+      "question": "What compilation flags and safety features are used in this project?",
+      "reference": "The project is compiled with strict compilation flags including -Wall, -Wextra, and -Werror to catch all warnings and treat them as errors. It uses the C11 standard with POSIX extensions (_POSIX_C_SOURCE=200809L). For memory safety, the address sanitizer is enabled with -fsanitize=address flag. The build system uses GNU Make with modular object file organization in a build/ directory. This ensures high code quality and helps detect memory safety issues during development.",
+      "metadata": {
+        "category": "development",
+        "difficulty": "medium",
+        "topic": "build_system"
+      }
+    },
+    {
+      "question": "What are the fd_interest values used by the selector and how are they combined?",
+      "reference": "The selector uses three fd_interest values defined as powers of 2 in selector.h: OP_NOOP (0) for no interest, OP_READ (1 << 0) for read interest, and OP_WRITE (1 << 2) for write interest. These are powers of 2 so they can be combined using bitwise OR operations to express multiple interests simultaneously. The INTEREST_OFF macro (defined as (FLAG) & ~(MASK)) is used to remove specific interests from a combination.",
+      "metadata": {
+        "category": "implementation",
+        "difficulty": "hard",
+        "topic": "selector_api"
+      }
+    },
+    {
+      "question": "What are the callback functions defined in the fd_handler structure?",
+      "reference": "The fd_handler structure in selector.h defines four callback functions: handle_read (called when data is available to read), handle_write (called when the socket is ready for writing), handle_block (called when a blocking operation like DNS resolution completes), and handle_close (called when the file descriptor is unregistered, typically used to free resources allocated in the data field). All callbacks receive a selector_key pointer containing the selector, file descriptor, and user-provided data.",
+      "metadata": {
+        "category": "implementation",
+        "difficulty": "medium",
+        "topic": "callback_handlers"
+      }
+    },
+    {
+      "question": "Describe the complete flow of an email from client connection to final delivery.",
+      "reference": "The email delivery flow is: 1) Client connects, socket added to selector, state: REQUEST_READ, server sends '220 local ESMTP Postfix'. 2) Client sends EHLO/HELO, parsed by request.c. 3) Client sends MAIL FROM, sender stored in smtp_data.mail_from. 4) Client sends RCPT TO (can repeat), recipients stored in smtp_data.rcpt_to[] array. 5) Client sends DATA, server creates temp file in mail/<domain>/<user>/tmp/<timestamp>, responds '354 End data with <CRLF>.<CRLF>'. 6) Client sends email body, request_data_handler writes to temp file, detects end with '.<CRLF>'. 7) Server copies temp file to each recipient's maildir/new/, registers transaction in access_registry, optionally spawns custom command process, sends '250 Message accepted'. 8) Client sends QUIT, connection finalized.",
+      "metadata": {
+        "category": "protocol",
+        "difficulty": "hard",
+        "topic": "smtp_flow"
+      }
+    },
+    {
+      "question": "How does the server support both IPv4 and IPv6 connections?",
+      "reference": "The server creates separate sockets for IPv4 and IPv6: one AF_INET6 socket (server6) and one AF_INET socket (server4) for SMTP, plus similar pairs for monitoring (monitor_server6 and monitor_server4). Both IPv6 sockets have the IPV6_V6ONLY option set to ensure they only listen on IPv6 addresses and don't accept IPv4-mapped IPv6 connections. All sockets are bound to INADDR_ANY/in6addr_any to accept connections on any interface, set to non-blocking mode, and registered with the selector. This dual-stack approach is implemented in main.c lines 102-263.",
+      "metadata": {
+        "category": "networking",
+        "difficulty": "hard",
+        "topic": "dual_stack"
+      }
+    },
+    {
+      "question": "What is the purpose of the state_definition structure in the state machine implementation?",
+      "reference": "The state_definition structure in stm.h defines a complete state in the state machine with a state identifier (typically from an enum starting at 0), and five callback functions: on_arrival (executed when entering the state), on_departure (executed when leaving the state), on_read_ready (executed when read data is available), on_write_ready (executed when socket is ready for writing), and on_block_ready (executed when a blocking operation like DNS resolution completes). Each callback receives a selector_key and returns the next state identifier, allowing dynamic state transitions based on events.",
+      "metadata": {
+        "category": "architecture",
+        "difficulty": "hard",
+        "topic": "state_machine_design"
+      }
+    },
+    {
+      "question": "What are the log levels supported by the logger and what is the default level?",
+      "reference": "The logger supports 6 log levels as mentioned in the codebase overview: DEBUG, INFO, OUTPUT, WARNING, ERROR, and FATAL. The default log level is set to LOG_DEBUG as shown in main.c line 267 (logger_set_level(LOG_DEBUG)). The logger provides async buffered logging to both file and stdout, with non-blocking writes via selector registration to ensure logging doesn't block the main event loop. The logger is thread-safe with proper memory management.",
+      "metadata": {
+        "category": "features",
+        "difficulty": "easy",
+        "topic": "logging"
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Test queries for evaluating Codebase RAG system on SMTP-Protos project",
+    "project": "SMTP-Protos",
+    "language": "C",
+    "num_samples": 20,
+    "with_references": 20,
+    "without_references": 0,
+    "created_for": "ragas_evaluation",
+    "coverage": [
+      "architecture",
+      "configuration",
+      "implementation",
+      "networking",
+      "features",
+      "monitoring",
+      "protocol",
+      "development"
+    ],
+    "topics": [
+      "project_overview",
+      "networking",
+      "io_multiplexing",
+      "non_blocking_io",
+      "email_storage",
+      "state_machines",
+      "command_line",
+      "monitor_protocol",
+      "signal_handling",
+      "data_structures",
+      "socket_options",
+      "audit_logging",
+      "email_processing",
+      "build_system",
+      "selector_api",
+      "callback_handlers",
+      "smtp_flow",
+      "dual_stack",
+      "state_machine_design",
+      "logging"
+    ],
+    "difficulty_distribution": {
+      "easy": 4,
+      "medium": 9,
+      "hard": 7
+    }
+  }
+}

@@ -151,21 +151,46 @@ def main():
             sys.exit(1)
 
     # ===================================================================
-    # PHASE 2: Initialize Collection
+    # PHASE 2: Load Existing Collection
     # ===================================================================
     print(f"\n{'='*60}")
-    print("PHASE 2: INITIALIZING CHROMADB COLLECTION")
+    print("PHASE 2: LOADING EXISTING CHROMADB COLLECTION")
     print(f"{'='*60}\n")
 
+    print(f"📊 Colección: '{args.collection_name}'")
     try:
-        collection = ChromaCollection(
-            args.collection_name,
-            config=rag_config
-        )
-        print(f"✅ Collection '{args.collection_name}' initialized")
+        if rag_config:
+            print(f"⏳ Cargando colección existente con config '{rag_config.name}'...")
+            print(f"   • Prompt: {rag_config.prompt.template}")
+            print(f"   • Modelo: {rag_config.model.name}")
+            print(f"   • Embeddings: {rag_config.embeddings.model_name}")
+            print(f"   • Retrieval: {rag_config.retrieval.k_documents} documentos")
+            if rag_config.rerank.enabled:
+                print(f"   • Reranking: {rag_config.rerank.strategy} (retrieve {rag_config.rerank.retrieve_k} → top {rag_config.rerank.top_n})")
+            else:
+                print(f"   • Reranking: Deshabilitado")
+            collection = ChromaCollection(args.collection_name, config=rag_config)
+        else:
+            print(f"⏳ Cargando colección existente con configuración por defecto...")
+            collection = ChromaCollection(args.collection_name)
+
+        print(f"✅ Colección cargada correctamente")
+
+        # Verificar que la colección tiene documentos
+        collection_size = collection.chroma_collection.count()
+        if collection_size == 0:
+            print(f"\n⚠️  Advertencia: La colección '{args.collection_name}' está vacía")
+            print(f"   Debe indexar documentos primero usando:")
+            print(f"   python index.py -z <archivo.zip> -c {args.collection_name}")
+            sys.exit(1)
+
+        print(f"   • Documentos en colección: {collection_size}")
+
     except Exception as e:
-        print(f"❌ Error initializing collection: {e}")
-        print("   Make sure the collection exists and has been populated with code.")
+        print(f"❌ Error: No se pudo acceder a la colección '{args.collection_name}'")
+        print(f"   {e}")
+        print(f"\n   ¿La colección existe? Use index.py para crearla primero:")
+        print(f"   python index.py -z <archivo.zip> -c {args.collection_name}")
         sys.exit(1)
 
     # ===================================================================

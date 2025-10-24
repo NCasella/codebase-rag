@@ -3,18 +3,38 @@
   "description": "Default RAGAS evaluation configuration with isolated evaluator LLM",
 
   "evaluator_llm": {
-    "provider": "google",
-    "model": "gemini-2.0-flash-lite",
-    "temperature": 0.0,
-    "top_p": 1.0,
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "temperature": 0.3,
+    "top_p": 0.9,
     "max_tokens": null,
-    "api_key_env": "GEMINI_API_KEY"
+    "api_key_env": "OPENAI_API_KEY"
   },
 
   "evaluator_embeddings": {
-    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "model_name": "sentence-transformers/all-mpnet-base-v2",
     "device": "cpu",
     "normalize_embeddings": true
+  },
+
+  "retrieval": {
+    "k_documents": 8,
+    "include_metadata": true,
+    "similarity_threshold": 0.3
+  },
+
+  "text_splitting": {
+    "parser_threshold": 5
+  },
+
+  "rerank": {
+    "enabled": true,
+    "strategy": "cross_encoder",
+    "retrieve_k": 20,
+    "top_n": 8,
+    "cross_encoder_model": "cross-encoder/ms-marco-MiniLM-L-12-v2",
+    "cross_encoder_device": "cpu",
+    "mmr_lambda": 0.5
   },
 
   "metrics": [
@@ -25,7 +45,7 @@
   ],
 
   "batch_size": 10,
-  "require_reference": false,
+  "require_reference": true,
   "warn_on_missing_fields": true,
   "stop_on_error": false,
   "verbose": true,
@@ -34,6 +54,6 @@
     "max_workers": 2,
     "max_wait": 180,
     "max_retries": 3,
-    "timeout": 60
+    "timeout": 120
   }
 }

@@ -34,6 +34,7 @@ class OpenAIModel(Model):
     See: https://platform.openai.com/docs/models
     """
     GPT_5_MINI = "gpt-5-mini"
+    GPT_4_1_MINI = "gpt-4.1-mini"
 
 # Model metadata for advanced features (context windows, pricing, etc.)
 MODEL_METADATA = {
@@ -58,6 +59,12 @@ MODEL_METADATA = {
         "tier": "production",
         "supports_temperature": False  # Only supports default 1.0
     },
+    OpenAIModel.GPT_4_1_MINI: {
+        "context_window": 1_047_576,
+        "output_limit": 32_768,
+        "tier": "production",
+        "supports_temperature": True
+    }
 }
 
 
