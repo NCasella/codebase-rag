@@ -327,13 +327,11 @@ Ver [requirements.txt](requirements.txt) para la lista completa.
 
 ## Mejoras Futuras
 
-- Soporte para modelos de embedding locales/open-source
-- Interfaz web
-- Actualizaciones incrementales de colecciones
-- Evaluación de rendimiento multi-lenguaje vs mono-lenguaje
-- Análisis de code coverage y generación de tests
-- Soporte multi-modal para diagramas
-- Métricas personalizadas de código
+- Embeddings especializados en código
+- Soporte para lenguajes de programación adicionales
+- Metadata filtering avanzado
+- Agentic RAG
+- Escalabilidad a repos > 100K docs
 
 ## Licencia
 
