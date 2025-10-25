@@ -81,7 +81,7 @@ python main.py -g <url_github> --config configs/chat_openai.json
 2. **`chat_openai_fast.json`**: `gpt-3.5-turbo`, sin reranking, más económica
 3. **`chat_openai_premium.json`**: `gpt-4o`, reranking agresivo, máxima calidad
 
-**Nota:** Solo OpenAI soporta historial conversacional. Ver [configs/CHAT_CONFIGS.md](configs/CHAT_CONFIGS.md) para más detalles.
+**Nota:** Actualmente solo modelos de OpenAI soportan historial conversacional.
 
 ### 📝 Modo Single-Shot
 
